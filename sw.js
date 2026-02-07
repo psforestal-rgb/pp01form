@@ -1,5 +1,5 @@
 /* sw.js - PP-01 ACOPAC PWA (offline shell) */
-const VERSION = 'pp01-pwa-v1.0.1';
+const VERSION = 'pp01-pwa-v1.0.2';
 const CACHE_NAME = `pp01-cache-${VERSION}`;
 
 const APP_SHELL = [
