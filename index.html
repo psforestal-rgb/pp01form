@@ -2949,7 +2949,19 @@ function getSmoothedLatLngFromBuffer(
         // - Dispara checkSpecies() y updateBlockSummary() inmediatamente
         // ============================================================================
         const PLANTNET_API_KEY = '2b10CDckJdHR4RQNLyzxoGvZe';
-        const PLANTNET_ENDPOINT_BASE = 'https://my-api.plantnet.org/v2/identify/all?include-related-images=false&no-reject=false&lang=es&api-key=';
+        const PLANTNET_DIRECT_URL = 'https://my-api.plantnet.org/v2/identify/all?include-related-images=false&no-reject=false&lang=es&api-key=';
+
+        // ── CORS Proxy config ──
+        // Pl@ntNet bloquea llamadas directas desde GitHub Pages (CORS 403).
+        // Opciones:
+        //   1. (Recomendado) Tu propio Cloudflare Worker gratis → poné tu URL:
+        //      const PLANTNET_CORS_PROXY = 'https://plantnet-proxy.TU-CUENTA.workers.dev/?url=';
+        //   2. Proxy público (funcional, puede ser lento/caerse):
+        const PLANTNET_CORS_PROXY = 'https://corsproxy.io/?url=';
+        // Para deshabilitar el proxy y llamar directo, poné:
+        // const PLANTNET_CORS_PROXY = '';
+
+        // buildPlantNetEndpoint ya no se necesita — el fallback está en identifyWithPlantNet()
 
 
         // ===========================
@@ -3117,19 +3129,46 @@ function getSmoothedLatLngFromBuffer(
         // Pl@ntNet identify helper
         // ===========================
         async function identifyWithPlantNet(imageBlob, filename, mime){
-            const endpoint = PLANTNET_ENDPOINT_BASE + encodeURIComponent(PLANTNET_API_KEY);
-
             const form = new FormData();
             const file = (imageBlob instanceof File)
                 ? imageBlob
                 : new File([imageBlob], filename || 'plantnet.jpg', { type: mime || imageBlob.type || 'image/jpeg' });
-
             form.append('images', file);
 
-            const res = await fetch(endpoint, { method:'POST', body: form });
+            // Intentar: 1) directo, 2) si CORS falla → proxy
+            const directUrl = PLANTNET_DIRECT_URL + encodeURIComponent(PLANTNET_API_KEY);
+            const proxyUrl  = PLANTNET_CORS_PROXY
+                ? PLANTNET_CORS_PROXY + encodeURIComponent(directUrl)
+                : null;
+
+            let res, usedProxy = false;
+            try {
+                res = await fetch(directUrl, { method:'POST', body: form });
+            } catch(directErr) {
+                // TypeError = CORS / red block → intentar proxy
+                if(proxyUrl){
+                    // Re-crear FormData (el body se consumió)
+                    const form2 = new FormData();
+                    form2.append('images', file);
+                    usedProxy = true;
+                    res = await fetch(proxyUrl, { method:'POST', body: form2 });
+                } else {
+                    throw new Error('CORS bloqueado y no hay proxy configurado. ' + directErr.message);
+                }
+            }
+
+            if(!res.ok){
+                // Si la respuesta directa da 403/CORS y hay proxy, reintentar
+                if(!usedProxy && proxyUrl && (res.status === 403 || res.status === 0)){
+                    const form3 = new FormData();
+                    form3.append('images', file);
+                    usedProxy = true;
+                    res = await fetch(proxyUrl, { method:'POST', body: form3 });
+                }
+            }
             if(!res.ok){
                 const txt = await res.text().catch(()=> '');
-                throw new Error('Pl@ntNet HTTP ' + res.status + ' ' + (txt ? ('- ' + txt.slice(0,120)) : ''));
+                throw new Error('Pl@ntNet HTTP ' + res.status + (usedProxy ? ' (vía proxy)' : '') + ' ' + (txt ? ('- ' + txt.slice(0,120)) : ''));
             }
             const data = await res.json();
 
