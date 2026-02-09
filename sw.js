@@ -1,5 +1,5 @@
 /* sw.js - PP-01 ACOPAC PWA v1.4.0 (offline shell + tile cache) */
-const VERSION = 'pp01-pwa-v1.4.0';
+const VERSION = 'pp01-pwa-v1.4.1';
 const CACHE_NAME = `pp01-cache-${VERSION}`;
 const TILE_CACHE = 'pp01-tiles-v1'; // Persistente entre actualizaciones de la app
 

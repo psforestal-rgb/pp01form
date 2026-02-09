@@ -4736,6 +4736,9 @@ function getSmoothedLatLngFromBuffer(
             try {
                 if (!inspeccionMap) return;
 
+                // Forzar recálculo de tamaño (crucial en PC / cambio de vista)
+                try { inspeccionMap.invalidateSize(); } catch(e){}
+
                 const bounds = L.latLngBounds([]);
 
                 // Puntos de track (si visible)
@@ -4758,14 +4761,37 @@ function getSmoothedLatLngFromBuffer(
                 if (mapLayers.vertices.visible) extendFromGroup(mapLayers.vertices.group);
                 if (mapLayers.observations.visible) extendFromGroup(mapLayers.observations.group);
 
-                // Ubicación actual
+                // Ubicación actual (marcador existente)
                 if (mapCurrentLocationMarker && mapCurrentLocationMarker.getLatLng) bounds.extend(mapCurrentLocationMarker.getLatLng());
 
                 if (bounds.isValid()) {
                     inspeccionMap.fitBounds(bounds, { padding: [18, 18], maxZoom: 18 });
                 } else {
-                    // fallback: CR
-                    inspeccionMap.setView([9.9, -84.1], 15);
+                    // Sin datos guardados: intentar obtener GPS en vivo
+                    if ('geolocation' in navigator) {
+                        navigator.geolocation.getCurrentPosition(
+                            function(pos) {
+                                const lat = pos.coords.latitude;
+                                const lon = pos.coords.longitude;
+                                if (isFinite(lat) && isFinite(lon)) {
+                                    inspeccionMap.setView([lat, lon], 17);
+                                    // Mostrar pulso de ubicación temporal
+                                    const pulse = L.circleMarker([lat, lon], {
+                                        radius: 10, color: '#2563eb', fillColor: '#3b82f6',
+                                        fillOpacity: 0.5, weight: 2
+                                    }).addTo(inspeccionMap);
+                                    setTimeout(() => { try { inspeccionMap.removeLayer(pulse); } catch(e){} }, 3000);
+                                }
+                            },
+                            function() {
+                                // GPS falló: fallback a CR central
+                                inspeccionMap.setView([9.93, -84.09], 15);
+                            },
+                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
+                        );
+                    } else {
+                        inspeccionMap.setView([9.93, -84.09], 15);
+                    }
                 }
             } catch (err) {
                 console.error('Error centerMapOnData:', err);
