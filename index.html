@@ -4352,12 +4352,12 @@ function getSmoothedLatLngFromBuffer(
                 // MEJORA: Dictámenes Dirección de Agua (MINAE)
                 const daWmsUrl = 'https://mapas.da.go.cr/geopc.php';
                 const daDictPI = L.tileLayer.wms(daWmsUrl, {
-                    layers: 'DA_Dictamenes_Punto_Inicial', format: 'image/png', transparent: true,
+                    layers: 'Aguas:DA_Dictamenes_Punto_Inicial', format: 'image/png', transparent: true,
                     version: '1.1.1', opacity: 0.8, maxZoom: 22, attribution: 'DA-MINAE',
                     crs: L.CRS.EPSG4326
                 });
                 const daDictPF = L.tileLayer.wms(daWmsUrl, {
-                    layers: 'DA_Dictamenes_Punto_Final', format: 'image/png', transparent: true,
+                    layers: 'Aguas:DA_Dictamenes_Punto_Final', format: 'image/png', transparent: true,
                     version: '1.1.1', opacity: 0.8, maxZoom: 22, attribution: 'DA-MINAE',
                     crs: L.CRS.EPSG4326
                 });
@@ -4391,12 +4391,12 @@ function getSmoothedLatLngFromBuffer(
                     },
                     {
                         name: 'Dict. Pto. Inicial', layer: daDictPI, url: daWmsUrl,
-                        queryLayer: 'DA_Dictamenes_Punto_Inicial', icon: 'fa-tint', color: '#0891b2',
+                        queryLayer: 'Aguas:DA_Dictamenes_Punto_Inicial', icon: 'fa-tint', color: '#0891b2',
                         fields: ['TIPO_DE_FUENTE', 'NUMERO_DE_OFICIO', 'CRITERIO'], minZoom: 10
                     },
                     {
                         name: 'Dict. Pto. Final', layer: daDictPF, url: daWmsUrl,
-                        queryLayer: 'DA_Dictamenes_Punto_Final', icon: 'fa-tint', color: '#0e7490',
+                        queryLayer: 'Aguas:DA_Dictamenes_Punto_Final', icon: 'fa-tint', color: '#0e7490',
                         fields: ['TIPO_DE_FUENTE', 'NUMERO_DE_OFICIO', 'CRITERIO'], minZoom: 10
                     }
                 ];
@@ -5196,12 +5196,12 @@ function getSmoothedLatLngFromBuffer(
                 {
                     name: 'DA Dict. Pto. Inicial',
                     url: 'https://mapas.da.go.cr/geopc.php',
-                    layer: 'DA_Dictamenes_Punto_Inicial'
+                    layer: 'Aguas:DA_Dictamenes_Punto_Inicial'
                 },
                 {
                     name: 'DA Dict. Pto. Final',
                     url: 'https://mapas.da.go.cr/geopc.php',
-                    layer: 'DA_Dictamenes_Punto_Final'
+                    layer: 'Aguas:DA_Dictamenes_Punto_Final'
                 }
             ];
 
