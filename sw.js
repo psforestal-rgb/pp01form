@@ -1,5 +1,5 @@
 /* sw.js - PP-01 ACOPAC PWA v1.5.0 (Fix WMS HTTPS) */
-const VERSION = 'pp01-pwa-v1.5.1-wms-network';
+const VERSION = 'pp01-pwa-v1.5.0-fix';
 const CACHE_NAME = `pp01-cache-${VERSION}`;
 const TILE_CACHE = 'pp01-tiles-v1'; 
 
@@ -98,14 +98,10 @@ self.addEventListener('fetch', (event) => {
 
   // 2. WMS
   if (WMS_HOSTS.some(h => url.hostname === h)) {
-    // IMPORTANTE:
-    // - NO interceptar/cachar GetMap para evitar respuestas "opaque" y falsos 200 desde SW
-    // - Dejar que el navegador haga el request directo al servidor (mejor depuración y menos "tiles invisibles")
+    // Cachear GetMap (imágenes), ignorar GetFeatureInfo (datos)
     if (url.search.toLowerCase().includes('request=getmap')) {
-      event.respondWith(fetch(req));
-      return;
+        event.respondWith(tileCacheFirst(req));
     }
-    // Para otras operaciones WMS (GetCapabilities, GetFeatureInfo, etc.), no intervenir.
     return;
   }
 

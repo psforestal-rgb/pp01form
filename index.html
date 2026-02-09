@@ -518,22 +518,12 @@
                 maxZoom: 22
             });
 
-            // Diagnóstico: si un tile WMS falla, registrar en consola (no afecta UI ni lógica)
-            snitZona1.on('tileerror', (e) => {
-                console.warn('[WMS] Error tile SNIT Catastro', e);
-            });
-
             const ignCauces = L.tileLayer.wms('https://geos.snitcr.go.cr/be/IGN_25/wms', {
                 layers: 'caucedrenaje_25k',
                 format: 'image/png',
                 transparent: true,
                 maxNativeZoom: 16,
                 maxZoom: 22
-            });
-
-            // Diagnóstico: si un tile WMS falla, registrar en consola (no afecta UI ni lógica)
-            ignCauces.on('tileerror', (e) => {
-                console.warn('[WMS] Error tile IGN Cauces', e);
             });
 
             googleSat.addTo(inspeccionMap); // Default
