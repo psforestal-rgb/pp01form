@@ -1,7 +1,7 @@
-/* sw.js - PP-01 ACOPAC PWA v1.4.0 (offline shell + tile cache) */
-const VERSION = 'pp01-pwa-v1.4.1';
+/* sw.js - PP-01 ACOPAC PWA v1.5.0 (Fix WMS HTTPS) */
+const VERSION = 'pp01-pwa-v1.5.1-wms-network';
 const CACHE_NAME = `pp01-cache-${VERSION}`;
-const TILE_CACHE = 'pp01-tiles-v1'; // Persistente entre actualizaciones de la app
+const TILE_CACHE = 'pp01-tiles-v1'; 
 
 const APP_SHELL = [
   './',
@@ -12,7 +12,7 @@ const APP_SHELL = [
   './icons/icon-512.png'
 ];
 
-/* Dominios de tiles base (cache-first para uso offline) */
+/* Tiles base (OpenTopo, Google, Esri) */
 const TILE_HOSTS = [
   'tile.opentopomap.org',
   'mt0.google.com', 'mt1.google.com', 'mt2.google.com', 'mt3.google.com',
@@ -21,39 +21,37 @@ const TILE_HOSTS = [
   'ecn.t2.tiles.virtualearth.net', 'ecn.t3.tiles.virtualearth.net'
 ];
 
-/* Dominios WMS (tiles GetMap se cachean, GetFeatureInfo pasa directo) */
+/* WMS Hosts - Asegurados HTTPS */
 const WMS_HOSTS = [
   'siri.snitcr.go.cr',
   'geos.snitcr.go.cr',
   'mapas.da.go.cr'
 ];
 
-/* 1x1 PNG transparente para tiles fallback offline */
+/* 1x1 Transparent PNG for offline fallback */
 const EMPTY_TILE_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==';
 
-// ── Install ──
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_SHELL);
+    // Intentar cachear shell, no fallar si falta algún icono
+    try { await cache.addAll(APP_SHELL); } catch(e) { console.warn('Shell partial cache', e); }
     self.skipWaiting();
   })());
 });
 
-// ── Activate: limpiar caches viejos PERO mantener TILE_CACHE ──
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.map(k => {
       if (k.startsWith('pp01-cache-') && k !== CACHE_NAME) return caches.delete(k);
-      // TILE_CACHE se mantiene siempre (no empieza con pp01-cache-)
       return null;
     }));
     self.clients.claim();
   })());
 });
 
-// ── Estrategia cache-first para tiles (con fallback offline) ──
+// Estrategia Cache-First para Tiles
 async function tileCacheFirst(req) {
   const cache = await caches.open(TILE_CACHE);
   const cached = await cache.match(req);
@@ -61,21 +59,25 @@ async function tileCacheFirst(req) {
 
   try {
     const res = await fetch(req);
+    // Solo cachear respuestas válidas (200 OK)
     if (res.ok) cache.put(req, res.clone());
     return res;
   } catch (e) {
-    // Offline: retornar tile transparente 1x1 para evitar errores visuales
-    const bytes = Uint8Array.from(atob(EMPTY_TILE_B64), c => c.charCodeAt(0));
-    return new Response(bytes, { status: 200, headers: { 'Content-Type': 'image/png' } });
+    // Si falla (offline) y es una imagen, devolver transparente
+    if (req.headers.get('Accept').includes('image')) {
+        const bytes = Uint8Array.from(atob(EMPTY_TILE_B64), c => c.charCodeAt(0));
+        return new Response(bytes, { status: 200, headers: { 'Content-Type': 'image/png' } });
+    }
+    throw e;
   }
 }
 
-// ── network-first (app shell) ──
+// Estrategia Network-First para HTML (App Shell updates)
 async function networkFirst(req) {
   const cache = await caches.open(CACHE_NAME);
   try {
     const res = await fetch(req);
-    if (req.method === 'GET' && res.ok) cache.put(req, res.clone());
+    if (res.ok) cache.put(req, res.clone());
     return res;
   } catch (e) {
     const cached = await cache.match(req);
@@ -84,85 +86,43 @@ async function networkFirst(req) {
   }
 }
 
-// ── cache-first (app assets) ──
-async function cacheFirst(req) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(req);
-  if (cached) return cached;
-  const res = await fetch(req);
-  if (req.method === 'GET' && res.ok) cache.put(req, res.clone());
-  return res;
-}
-
-// ── Fetch handler ──
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') return;
-
   const url = new URL(req.url);
-  const host = url.hostname;
 
-  // 1) Tiles de mapas base → cache-first desde TILE_CACHE
-  if (TILE_HOSTS.some(h => host.endsWith(h))) {
+  // 1. Tiles Mapas Base
+  if (TILE_HOSTS.some(h => url.hostname.endsWith(h))) {
     event.respondWith(tileCacheFirst(req));
     return;
   }
 
-  // 2) Servidores WMS → cachear GetMap tiles, dejar pasar GetFeatureInfo
-  if (WMS_HOSTS.some(h => host === h)) {
-    const params = url.searchParams;
-    const wmsReq = (params.get('REQUEST') || params.get('request') || '').toLowerCase();
-    if (wmsReq === 'getfeatureinfo') {
-      // GetFeatureInfo: network-only (datos frescos)
+  // 2. WMS
+  if (WMS_HOSTS.some(h => url.hostname === h)) {
+    // IMPORTANTE:
+    // - NO interceptar/cachar GetMap para evitar respuestas "opaque" y falsos 200 desde SW
+    // - Dejar que el navegador haga el request directo al servidor (mejor depuración y menos "tiles invisibles")
+    if (url.search.toLowerCase().includes('request=getmap')) {
+      event.respondWith(fetch(req));
       return;
     }
-    // GetMap (tiles WMS): cache-first
+    // Para otras operaciones WMS (GetCapabilities, GetFeatureInfo, etc.), no intervenir.
+    return;
+  }
+
+  // 3. CDNs Externos (Leaflet, FA)
+  if (url.hostname.includes('unpkg.com') || url.hostname.includes('cloudflare.com')) {
     event.respondWith(tileCacheFirst(req));
     return;
   }
 
-  // 3) CDN de librerías externas (FontAwesome, Tailwind, Leaflet, etc)
-  if (host.includes('cdnjs.cloudflare.com') || host.includes('cdn.tailwindcss.com') ||
-      host.includes('unpkg.com') || host.includes('fonts.googleapis.com') ||
-      host.includes('fonts.gstatic.com')) {
-    event.respondWith(tileCacheFirst(req));
-    return;
-  }
-
-  // 4) Same-origin: lógica existente
-  if (url.origin !== self.location.origin) return;
-
+  // 4. Navegación principal
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirst('./index.html'));
+    event.respondWith(networkFirst(req));
     return;
   }
 
-  event.respondWith(cacheFirst(req));
-});
-
-// ── Message handler: pre-cache tiles de CR ──
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'PRECACHE_TILES') {
-    const urls = event.data.urls || [];
-    event.waitUntil((async () => {
-      const cache = await caches.open(TILE_CACHE);
-      let cached = 0, failed = 0;
-      // Procesar en lotes de 6 para no saturar la red
-      for (let i = 0; i < urls.length; i += 6) {
-        const batch = urls.slice(i, i + 6);
-        const results = await Promise.allSettled(batch.map(async (u) => {
-          const existing = await cache.match(u);
-          if (existing) return;
-          const res = await fetch(u);
-          if (res.ok) { await cache.put(u, res); cached++; }
-        }));
-        results.forEach(r => { if (r.status === 'rejected') failed++; });
-      }
-      console.log(`[SW] Pre-cache: ${cached} nuevos, ${failed} fallidos, de ${urls.length} tiles`);
-      const clients = await self.clients.matchAll();
-      clients.forEach(c => c.postMessage({
-        type: 'PRECACHE_DONE', cached, failed, total: urls.length
-      }));
-    })());
-  }
+  // 5. Default Cache First
+  event.respondWith(
+    caches.match(req).then(cached => cached || fetch(req))
+  );
 });
