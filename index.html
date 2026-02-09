@@ -32,7 +32,7 @@ CARACTERÍSTICAS PRINCIPALES
    - Número de árbol editable (consecutivo automático)
    - Uso del suelo: Agropecuario, Urbano, Regeneración natural, Ecosistema boscoso,
      Sistema agroforestal, Plantación forestal, Otro (con campo de texto)
-   - Inclinación del terreno: %, Grados, Cálculo (dist/alt), Caminata GPS (en desarrollo)
+   - Inclinación del terreno: %, Grados, Cálculo (dist/alt), Clinómetro (sensores del teléfono)
    - Medición: DAP o CAP (circunferencia), resultado siempre en DAP
    - Fórmula volumen: V = 0.00008379 × DAP^2.04 × LCT^0.78
    - Base de datos de 200+ especies costarricenses
@@ -70,9 +70,12 @@ CARACTERÍSTICAS PRINCIPALES
 ================================================================================
 MÓDULOS EXTERNOS PENDIENTES
 ================================================================================
-- CAMINATA GPS: Herramienta para medir inclinación caminando entre dos puntos
-  * Debe llamar a: setSlopeFromWalk(arbolId, pendientePorcentaje)
-  * Ver función openWalkTool() para integración
+- CLINÓMETRO: Herramienta integrada para medir inclinación con sensores del teléfono
+  * Usa DeviceOrientationEvent para medir pendiente
+  * Sistema de calibración en superficie plana (persiste en localStorage)
+  * Diagnóstico de sensores integrado
+  * Llama a: setSlopeFromClinometer(arbolId, pendientePorcentaje)
+  * Ver función openClinometer() para integración
 
 ================================================================================
 NOTAS IMPORTANTES PARA CONTINUIDAD DEL DESARROLLO
@@ -2761,16 +2764,184 @@ function getSmoothedLatLngFromBuffer(
             }
         }
         let gpsIntervals={};
-        function startGPS(id){ document.getElementById(`btn_start_gps_${id}`).classList.add('hidden'); document.getElementById(`btn_stop_gps_${id}`).classList.remove('hidden'); document.getElementById(`map_overlay_${id}`).classList.add('hidden'); document.getElementById(`gps_display_${id}`).classList.remove('hidden'); let p=25.0; const bn=1095200; const be=445300; const d=document.getElementById(`gps_display_${id}`); 
-            d.innerHTML=`<div class="bg-gray-50 border border-gray-300 rounded p-2 text-center shadow-inner"><div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200"><div class="flex items-center gap-2"><div class="gps-active-dot"></div><span class="text-xs font-bold text-gray-700 animate-pulse">Triangulando...</span></div><div class="text-right"><span class="text-xs text-gray-500">Incertidumbre:</span><br><span id="gps_unc_${id}" class="text-lg font-mono font-bold text-red-600">± 25.0 m</span></div></div><div class="grid grid-cols-2 gap-2 text-left mb-2"><div class="bg-white p-1 rounded border"><span class="text-[10px] text-gray-400 block uppercase">Norte (Y)</span><span id="gps_n_${id}" class="font-mono font-bold text-sm text-gray-800">---</span></div><div class="bg-white p-1 rounded border"><span class="text-[10px] text-gray-400 block uppercase">Este (X)</span><span id="gps_e_${id}" class="font-mono font-bold text-sm text-gray-800">---</span></div></div><div class="w-full bg-gray-200 rounded-full h-1"><div id="gps_bar_${id}" class="bg-red-500 h-1 rounded-full" style="width:10%;transition:width 0.5s"></div></div><div class="text-[10px] text-gray-400 mt-1 text-right">CR-SIRGAS / CRTM05 (EPSG:8908)</div></div>`;
-            gpsIntervals[id]=setInterval(()=>{ if(p>2.0){ p-=(Math.random()*1.5); if(p<2.0)p=2.0; } const o=(Math.random()-0.5)*p; const cn=(bn+o).toFixed(2); const ce=(be+o).toFixed(2); const cl=(9.913+(o/111000)).toFixed(6); const clo=(-84.523+(o/111000)).toFixed(6); d.dataset.norte=cn; d.dataset.este=ce; d.dataset.lat=cl; d.dataset.lon=clo; d.dataset.ele="200"; let c="text-red-600"; let bC="bg-red-500"; let w="10%"; if(p<10){ c="text-yellow-600"; bC="bg-yellow-500"; w="50%"; } if(p<5){ c="text-green-600"; bC="bg-green-600"; w="100%"; } 
-            const u=document.getElementById(`gps_unc_${id}`); if(u){u.textContent=`± ${p.toFixed(1)} m`; u.className=`text-lg font-mono font-bold ${c}`;}
-            const n=document.getElementById(`gps_n_${id}`); if(n) n.textContent=cn;
-            const e=document.getElementById(`gps_e_${id}`); if(e) e.textContent=ce;
-            const bar=document.getElementById(`gps_bar_${id}`); if(bar){bar.className=`${bC} h-1 rounded-full`; bar.style.width=w; bar.style.transition='width 0.5s';}
-            },1000); }
-        function stopGPS(id){ clearInterval(gpsIntervals[id]); const b=document.getElementById(`btn_stop_gps_${id}`); const d=document.getElementById(`gps_display_${id}`); b.innerHTML='<i class="fas fa-check mr-2"></i> Guardado'; b.classList.remove('bg-red-100','text-red-700','hover:bg-red-200'); b.classList.add('bg-green-600','text-white','hover:bg-green-700','cursor-not-allowed'); b.disabled=true; document.getElementById(`btn_reset_gps_${id}`).classList.remove('hidden'); const w=d.querySelector('.bg-gray-50'); if(w){w.classList.remove('bg-gray-50');w.classList.add('bg-green-50');w.classList.remove('border-gray-300');w.classList.add('border-green-300');} const dot=d.querySelector('.gps-active-dot'); if(dot)dot.classList.add('hidden'); const pulse=d.querySelector('.animate-pulse'); if(pulse){pulse.classList.remove('animate-pulse');pulse.textContent='COORDENADA FIJA';} }
-        function resetGPS(id){ document.getElementById(`btn_start_gps_${id}`).classList.remove('hidden'); const b=document.getElementById(`btn_stop_gps_${id}`); b.classList.add('hidden'); b.classList.remove('bg-green-600','text-white','hover:bg-green-700','cursor-not-allowed'); b.classList.add('bg-red-100','text-red-700','hover:bg-red-200'); b.innerHTML='<i class="fas fa-stop-circle mr-1"></i> Finalizar'; b.disabled=false; document.getElementById(`btn_reset_gps_${id}`).classList.add('hidden'); document.getElementById(`map_overlay_${id}`).classList.remove('hidden'); const d=document.getElementById(`gps_display_${id}`); d.classList.add('hidden'); d.innerHTML=''; d.dataset.norte=''; d.dataset.este=''; d.dataset.lat=''; d.dataset.lon=''; }
+        // --- Conversión WGS84 ↔ CRTM05 (aprox. consistente con saveManualCoord) ---
+        function wgs84ToCrtm05(lat, lon) {
+            const norte = lat * 111319.9 + 1000000;
+            const este = (lon + 84.0) * 111319.9 * Math.cos(lat * Math.PI / 180) + 500000;
+            return { norte, este };
+        }
+
+        // --- GPS real con watchPosition + PROMEDIADO PONDERADO ---
+        // Técnica profesional: acumula lecturas buenas y promedia ponderando por 1/accuracy²
+        // Reduce error efectivo ~40-60% vs lectura única
+        const gpsWatchIds = {};
+        const gpsReadings = {};     // array de lecturas buenas por id
+        const GPS_MAX_ACC = 25;     // descartar lecturas peores que 25m
+        const GPS_MIN_READINGS = 3; // mínimo para promediar
+
+        function _gpsWeightedAvg(readings) {
+            // Promedio ponderado: peso = 1/accuracy² (lecturas más precisas pesan más)
+            let wLat = 0, wLon = 0, wEle = 0, wSum = 0;
+            let minAcc = Infinity;
+            readings.forEach(r => {
+                const w = 1 / (r.acc * r.acc);
+                wLat += r.lat * w;
+                wLon += r.lon * w;
+                wEle += r.ele * w;
+                wSum += w;
+                if (r.acc < minAcc) minAcc = r.acc;
+            });
+            const avgLat = wLat / wSum;
+            const avgLon = wLon / wSum;
+            const avgEle = wEle / wSum;
+            // Incertidumbre estimada: mejora con √n de lecturas buenas
+            const effAcc = minAcc / Math.sqrt(Math.min(readings.length, 20));
+            return { lat: avgLat, lon: avgLon, ele: avgEle, acc: effAcc, n: readings.length, bestAcc: minAcc };
+        }
+
+        function startGPS(id){
+            document.getElementById(`btn_start_gps_${id}`).classList.add('hidden');
+            document.getElementById(`btn_stop_gps_${id}`).classList.remove('hidden');
+            document.getElementById(`map_overlay_${id}`).classList.add('hidden');
+            document.getElementById(`gps_display_${id}`).classList.remove('hidden');
+
+            const d = document.getElementById(`gps_display_${id}`);
+            d.innerHTML=`<div class="bg-gray-50 border border-gray-300 rounded p-2 text-center shadow-inner"><div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200"><div class="flex items-center gap-2"><div class="gps-active-dot"></div><span id="gps_label_${id}" class="text-xs font-bold text-gray-700 animate-pulse">Buscando satélites...</span></div><div class="text-right"><span class="text-xs text-gray-500">Incertidumbre:</span><br><span id="gps_unc_${id}" class="text-lg font-mono font-bold text-red-600">± -- m</span></div></div><div class="grid grid-cols-2 gap-2 text-left mb-2"><div class="bg-white p-1 rounded border"><span class="text-[10px] text-gray-400 block uppercase">Norte (Y)</span><span id="gps_n_${id}" class="font-mono font-bold text-sm text-gray-800">---</span></div><div class="bg-white p-1 rounded border"><span class="text-[10px] text-gray-400 block uppercase">Este (X)</span><span id="gps_e_${id}" class="font-mono font-bold text-sm text-gray-800">---</span></div></div><div id="gps_avg_info_${id}" class="text-[10px] text-blue-600 font-bold mb-1 hidden"><i class="fas fa-layer-group mr-1"></i>Promediando: <span id="gps_avg_n_${id}">0</span> lecturas</div><div class="w-full bg-gray-200 rounded-full h-1"><div id="gps_bar_${id}" class="bg-red-500 h-1 rounded-full" style="width:5%;transition:width 0.5s"></div></div><div class="text-[10px] text-gray-400 mt-1 text-right">CR-SIRGAS / CRTM05 (EPSG:8908)</div></div>`;
+
+            gpsReadings[id] = [];
+
+            if (!("geolocation" in navigator)) {
+                const u = document.getElementById(`gps_unc_${id}`);
+                if (u) { u.textContent = 'GPS no disponible'; u.className = 'text-sm font-mono font-bold text-red-600'; }
+                return;
+            }
+
+            gpsWatchIds[id] = navigator.geolocation.watchPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const acc = position.coords.accuracy;
+                    const ele = position.coords.altitude || 0;
+
+                    // Descartar lecturas muy malas
+                    if (acc > GPS_MAX_ACC) {
+                        const lbl = document.getElementById(`gps_label_${id}`);
+                        if (lbl && gpsReadings[id].length === 0) lbl.textContent = `Precisión baja (±${Math.round(acc)}m), esperando...`;
+                        return;
+                    }
+
+                    // Acumular lectura buena
+                    gpsReadings[id].push({ lat, lon, ele, acc });
+
+                    // Limitar a últimas 30 lecturas (ventana deslizante)
+                    if (gpsReadings[id].length > 30) gpsReadings[id].shift();
+
+                    // Calcular promedio ponderado
+                    const avg = _gpsWeightedAvg(gpsReadings[id]);
+                    const crtm = wgs84ToCrtm05(avg.lat, avg.lon);
+
+                    // Actualizar dataset con el promediado
+                    d.dataset.norte = crtm.norte.toFixed(2);
+                    d.dataset.este = crtm.este.toFixed(2);
+                    d.dataset.lat = avg.lat.toFixed(6);
+                    d.dataset.lon = avg.lon.toFixed(6);
+                    d.dataset.ele = String(Math.round(avg.ele));
+
+                    // Actualizar UI
+                    const p = avg.acc;
+                    let c = "text-red-600", bC = "bg-red-500", w = "10%";
+                    if (p < 12) { c = "text-yellow-600"; bC = "bg-yellow-500"; w = "40%"; }
+                    if (p < 6)  { c = "text-amber-500";  bC = "bg-amber-500";  w = "65%"; }
+                    if (p < 3)  { c = "text-green-600";  bC = "bg-green-600";  w = "100%"; }
+
+                    const uEl = document.getElementById(`gps_unc_${id}`);
+                    if (uEl) { uEl.textContent = `± ${p.toFixed(1)} m`; uEl.className = `text-lg font-mono font-bold ${c}`; }
+
+                    const nEl = document.getElementById(`gps_n_${id}`);
+                    if (nEl) nEl.textContent = crtm.norte.toFixed(2);
+
+                    const eEl = document.getElementById(`gps_e_${id}`);
+                    if (eEl) eEl.textContent = crtm.este.toFixed(2);
+
+                    const bar = document.getElementById(`gps_bar_${id}`);
+                    if (bar) { bar.className = `${bC} h-1 rounded-full`; bar.style.width = w; bar.style.transition = 'width 0.5s'; }
+
+                    // Mostrar contador de promediado
+                    const lbl = document.getElementById(`gps_label_${id}`);
+                    if (lbl) {
+                        if (avg.n < GPS_MIN_READINGS) lbl.textContent = 'Triangulando...';
+                        else lbl.textContent = `Promediando (${avg.n} lecturas)`;
+                    }
+                    const avgInfo = document.getElementById(`gps_avg_info_${id}`);
+                    const avgN = document.getElementById(`gps_avg_n_${id}`);
+                    if (avgInfo && avg.n >= GPS_MIN_READINGS) {
+                        avgInfo.classList.remove('hidden');
+                        if (avgN) avgN.textContent = avg.n;
+                    }
+                },
+                function(error) {
+                    console.warn('GPS error (' + id + '):', error.message);
+                    const uEl = document.getElementById(`gps_unc_${id}`);
+                    if (uEl) { uEl.textContent = 'Error GPS'; uEl.className = 'text-sm font-mono font-bold text-red-600'; }
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        function stopGPS(id){
+            // Detener watchPosition
+            if (gpsWatchIds[id] !== undefined) {
+                navigator.geolocation.clearWatch(gpsWatchIds[id]);
+                delete gpsWatchIds[id];
+            }
+            // Limpiar interval viejo si existe (compat)
+            if (gpsIntervals[id]) { clearInterval(gpsIntervals[id]); delete gpsIntervals[id]; }
+
+            const b = document.getElementById(`btn_stop_gps_${id}`);
+            const d = document.getElementById(`gps_display_${id}`);
+            b.innerHTML = '<i class="fas fa-check mr-2"></i> Guardado';
+            b.classList.remove('bg-red-100','text-red-700','hover:bg-red-200');
+            b.classList.add('bg-green-600','text-white','hover:bg-green-700','cursor-not-allowed');
+            b.disabled = true;
+            document.getElementById(`btn_reset_gps_${id}`).classList.remove('hidden');
+            const w = d.querySelector('.bg-gray-50');
+            if (w) { w.classList.remove('bg-gray-50'); w.classList.add('bg-green-50'); w.classList.remove('border-gray-300'); w.classList.add('border-green-300'); }
+            const dot = d.querySelector('.gps-active-dot');
+            if (dot) dot.classList.add('hidden');
+            const pulse = d.querySelector('.animate-pulse');
+            if (pulse) {
+                pulse.classList.remove('animate-pulse');
+                const n = gpsReadings[id] ? gpsReadings[id].length : 0;
+                pulse.textContent = n >= GPS_MIN_READINGS ? `FIJA (${n} lecturas prom.)` : 'COORDENADA FIJA';
+            }
+        }
+
+        function resetGPS(id){
+            // Detener watchPosition si aún corre
+            if (gpsWatchIds[id] !== undefined) {
+                navigator.geolocation.clearWatch(gpsWatchIds[id]);
+                delete gpsWatchIds[id];
+            }
+            if (gpsIntervals[id]) { clearInterval(gpsIntervals[id]); delete gpsIntervals[id]; }
+            delete gpsReadings[id];
+
+            document.getElementById(`btn_start_gps_${id}`).classList.remove('hidden');
+            const b = document.getElementById(`btn_stop_gps_${id}`);
+            b.classList.add('hidden');
+            b.classList.remove('bg-green-600','text-white','hover:bg-green-700','cursor-not-allowed');
+            b.classList.add('bg-red-100','text-red-700','hover:bg-red-200');
+            b.innerHTML = '<i class="fas fa-stop-circle mr-1"></i> Finalizar';
+            b.disabled = false;
+            document.getElementById(`btn_reset_gps_${id}`).classList.add('hidden');
+            document.getElementById(`map_overlay_${id}`).classList.remove('hidden');
+            const d = document.getElementById(`gps_display_${id}`);
+            d.classList.add('hidden');
+            d.innerHTML = '';
+            d.dataset.norte = '';
+            d.dataset.este = '';
+            d.dataset.lat = '';
+            d.dataset.lon = '';
+        }
         function saveSimpleField(id){ document.getElementById(`input_${id}`).disabled=true; document.getElementById(`btn_save_${id}`).classList.add('hidden'); document.getElementById(`btn_edit_${id}`).classList.remove('hidden'); document.getElementById(`container_${id}`).classList.add('opacity-75'); updateSectionStatus(); }
         function editSimpleField(id){ document.getElementById(`input_${id}`).disabled=false; document.getElementById(`btn_save_${id}`).classList.remove('hidden'); document.getElementById(`btn_edit_${id}`).classList.add('hidden'); document.getElementById(`container_${id}`).classList.remove('opacity-75'); updateSectionStatus(); }
         function clearSimpleField(id){ document.getElementById(`input_${id}`).value=""; if(document.getElementById(`input_${id}`).disabled) editSimpleField(id); }
@@ -2854,7 +3025,7 @@ function getSmoothedLatLngFromBuffer(
         function saveFuenteData(id){ if(!inspeccionIniciada){ alert('Debe iniciar la inspección primero presionando el botón "Iniciar".'); return; } const f=document.getElementById(`fields_fuente_${id}`); f.querySelectorAll('input, select, textarea, button').forEach(e=>e.disabled=true); document.getElementById(`num_fuente_${id}`).disabled=true; document.getElementById(`btn_save_fuente_${id}`).classList.add('hidden'); document.getElementById(`btn_edit_fuente_${id}`).classList.remove('hidden'); f.classList.add('opacity-75'); document.getElementById(`status_w${id}`).className='block-status saved'; document.getElementById(`status_w${id}`).textContent='Guardado'; collapseBlock('fuente_block_'+id); updateSectionStatus(); }
         function editFuenteData(id){ const f=document.getElementById(`fields_fuente_${id}`); f.querySelectorAll('input, select, textarea, button').forEach(e=>e.disabled=false); document.getElementById(`num_fuente_${id}`).disabled=false; document.getElementById(`btn_save_fuente_${id}`).classList.remove('hidden'); document.getElementById(`btn_edit_fuente_${id}`).classList.add('hidden'); f.classList.remove('opacity-75'); document.getElementById(`status_w${id}`).className='block-status pending'; document.getElementById(`status_w${id}`).textContent='Pendiente'; updateSectionStatus(); }
         let countArboles=0;
-        function addArbol(){ countArboles++; const id='t'+countArboles; const blockId='arbol_'+countArboles; const d=document.createElement('div'); d.className='repeat-block border border-green-200 relative mb-4 shadow-sm rounded-lg'; d.id=blockId; const cid1=`cam_arbol_${countArboles}_1`; const cid2=`cam_arbol_${countArboles}_2`; const cid3=`cam_arbol_${countArboles}_3`; const bid1=`btn_cam_arbol_${countArboles}_1`; const bid2=`btn_cam_arbol_${countArboles}_2`; const bid3=`btn_cam_arbol_${countArboles}_3`; d.innerHTML=`<div class="block-header" onclick="toggleBlock('${blockId}', this.querySelector('.block-toggle'))"><div class="block-header-left"><span class="block-number"><i class="fas fa-tree mr-2 text-green-400"></i>Árbol #<span id="num_display_t${countArboles}">${countArboles}</span></span><span class="block-summary" id="summary_t${countArboles}">Sin especie</span><span class="block-status pending" id="status_t${countArboles}">Pendiente</span></div><div class="block-header-right"><button class="block-toggle" onclick="event.stopPropagation()"><i class="fas fa-chevron-down"></i></button></div></div><div id="content_${blockId}" class="block-content p-4" style="max-height: 3000px;"><div id="fields_arbol_${countArboles}" class="transition-opacity"><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Número de Árbol</label><input type="number" id="num_arbol_${countArboles}" class="input-field" value="${countArboles}" min="1" oninput="updateNumDisplay('t',${countArboles})"></div><div class="mb-4 pb-4 border-b border-gray-200"><h6 class="text-xs font-bold text-gray-500 uppercase mb-2">Contexto / Uso del Suelo</h6><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Uso del suelo</label><select id="tipo_uso_arbol_${countArboles}" class="input-field" onchange="toggleUsoSueloArbol(${countArboles})"><option value="">Seleccione...</option><option value="agropecuario">Agropecuario</option><option value="urbano">Urbano</option><option value="regeneracion">Regeneración natural</option><option value="parche">Ecosistema boscoso</option><option value="agroforestal">Sistema agroforestal</option><option value="plantacion">Plantación forestal</option><option value="otro">Otro</option></select></div><div id="field_sp_agronomicas_${countArboles}" class="mb-3 hidden-field bg-yellow-50 p-2 rounded border border-yellow-100"><label class="block text-sm font-medium text-gray-700">Especies agronómicas</label><input type="text" class="input-field" placeholder="Ej: Café..."></div><div id="field_uso_otro_${countArboles}" class="mb-3 hidden-field bg-purple-50 p-2 rounded border border-purple-100"><label class="block text-sm font-medium text-gray-700">Especifique el uso del suelo</label><input type="text" id="input_uso_otro_${countArboles}" class="input-field" placeholder="Describa el uso del suelo..."></div><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Observaciones contexto</label><textarea class="input-field" rows="1"></textarea></div><div class="mb-3"><label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-mountain mr-1 text-gray-500"></i> Inclinación del terreno</label><div class="flex gap-1 mb-2"><button type="button" onclick="toggleSlopeMode(${countArboles},'pct')" id="btn_slope_pct_${countArboles}" class="flex-1 py-2 px-1 rounded-l-lg font-semibold text-xs bg-green-600 text-white border-2 border-green-600"><i class="fas fa-percent mr-1"></i>%</button><button type="button" onclick="toggleSlopeMode(${countArboles},'deg')" id="btn_slope_deg_${countArboles}" class="flex-1 py-2 px-1 font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-compass mr-1"></i>Grados</button><button type="button" onclick="toggleSlopeMode(${countArboles},'calc')" id="btn_slope_calc_${countArboles}" class="flex-1 py-2 px-1 font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-calculator mr-1"></i>Calc.</button><button type="button" onclick="toggleSlopeMode(${countArboles},'walk')" id="btn_slope_walk_${countArboles}" class="flex-1 py-2 px-1 rounded-r-lg font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-walking mr-1"></i>Caminata</button></div><div id="slope_pct_${countArboles}"><input type="number" id="val_slope_pct_${countArboles}" class="input-field" placeholder="Ej: 25" step="0.1" oninput="updateSlopeResult(${countArboles},'pct')"><span class="text-xs text-gray-500">Ingrese directamente en %</span></div><div id="slope_deg_${countArboles}" class="hidden"><input type="number" id="val_slope_deg_${countArboles}" class="input-field" placeholder="Ej: 14" step="0.1" oninput="updateSlopeResult(${countArboles},'deg')"><span class="text-xs text-gray-500">Ingrese en grados (°)</span></div><div id="slope_calc_${countArboles}" class="hidden bg-blue-50 p-2 rounded border border-blue-200"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs text-gray-600">Distancia (m)</label><input type="number" id="val_slope_dist_${countArboles}" class="input-field text-sm py-2" placeholder="Dist." step="0.1" oninput="updateSlopeResult(${countArboles},'calc')"></div><div><label class="text-xs text-gray-600">Altura (m)</label><input type="number" id="val_slope_alt_${countArboles}" class="input-field text-sm py-2" placeholder="Alt." step="0.1" oninput="updateSlopeResult(${countArboles},'calc')"></div></div><span class="text-xs text-blue-600"><i class="fas fa-info-circle mr-1"></i>% = (Altura / Distancia) × 100</span></div><div id="slope_walk_${countArboles}" class="hidden bg-purple-50 p-3 rounded border-2 border-purple-200 text-center"><div class="text-purple-700 mb-2"><i class="fas fa-walking fa-2x mb-2"></i><div class="font-bold">Medición por Caminata GPS</div></div><button type="button" onclick="openWalkTool(${countArboles})" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm"><i class="fas fa-external-link-alt mr-1"></i> Abrir Herramienta</button><div class="text-xs text-purple-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Mide pendiente caminando entre dos puntos</div></div><div id="slope_result_${countArboles}" class="mt-2 text-center p-2 bg-gray-100 rounded border hidden"><span class="text-sm font-bold text-gray-700">Pendiente: </span><span id="slope_value_${countArboles}" class="text-lg font-bold text-green-700">0.0</span><span class="text-sm font-bold text-gray-700"> %</span></div></div></div><div class="mb-4"><label class="block text-sm font-bold mb-1">Nombre Científico</label><div class="species-autocomplete">
+        function addArbol(){ countArboles++; const id='t'+countArboles; const blockId='arbol_'+countArboles; const d=document.createElement('div'); d.className='repeat-block border border-green-200 relative mb-4 shadow-sm rounded-lg'; d.id=blockId; const cid1=`cam_arbol_${countArboles}_1`; const cid2=`cam_arbol_${countArboles}_2`; const cid3=`cam_arbol_${countArboles}_3`; const bid1=`btn_cam_arbol_${countArboles}_1`; const bid2=`btn_cam_arbol_${countArboles}_2`; const bid3=`btn_cam_arbol_${countArboles}_3`; d.innerHTML=`<div class="block-header" onclick="toggleBlock('${blockId}', this.querySelector('.block-toggle'))"><div class="block-header-left"><span class="block-number"><i class="fas fa-tree mr-2 text-green-400"></i>Árbol #<span id="num_display_t${countArboles}">${countArboles}</span></span><span class="block-summary" id="summary_t${countArboles}">Sin especie</span><span class="block-status pending" id="status_t${countArboles}">Pendiente</span></div><div class="block-header-right"><button class="block-toggle" onclick="event.stopPropagation()"><i class="fas fa-chevron-down"></i></button></div></div><div id="content_${blockId}" class="block-content p-4" style="max-height: 3000px;"><div id="fields_arbol_${countArboles}" class="transition-opacity"><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Número de Árbol</label><input type="number" id="num_arbol_${countArboles}" class="input-field" value="${countArboles}" min="1" oninput="updateNumDisplay('t',${countArboles})"></div><div class="mb-4 pb-4 border-b border-gray-200"><h6 class="text-xs font-bold text-gray-500 uppercase mb-2">Contexto / Uso del Suelo</h6><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Uso del suelo</label><select id="tipo_uso_arbol_${countArboles}" class="input-field" onchange="toggleUsoSueloArbol(${countArboles})"><option value="">Seleccione...</option><option value="agropecuario">Agropecuario</option><option value="urbano">Urbano</option><option value="regeneracion">Regeneración natural</option><option value="parche">Ecosistema boscoso</option><option value="agroforestal">Sistema agroforestal</option><option value="plantacion">Plantación forestal</option><option value="otro">Otro</option></select></div><div id="field_sp_agronomicas_${countArboles}" class="mb-3 hidden-field bg-yellow-50 p-2 rounded border border-yellow-100"><label class="block text-sm font-medium text-gray-700">Especies agronómicas</label><input type="text" class="input-field" placeholder="Ej: Café..."></div><div id="field_uso_otro_${countArboles}" class="mb-3 hidden-field bg-purple-50 p-2 rounded border border-purple-100"><label class="block text-sm font-medium text-gray-700">Especifique el uso del suelo</label><input type="text" id="input_uso_otro_${countArboles}" class="input-field" placeholder="Describa el uso del suelo..."></div><div class="mb-3"><label class="block text-sm font-medium text-gray-700">Observaciones contexto</label><textarea class="input-field" rows="1"></textarea></div><div class="mb-3"><label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-mountain mr-1 text-gray-500"></i> Inclinación del terreno</label><div class="flex gap-1 mb-2"><button type="button" onclick="toggleSlopeMode(${countArboles},'pct')" id="btn_slope_pct_${countArboles}" class="flex-1 py-2 px-1 rounded-l-lg font-semibold text-xs bg-green-600 text-white border-2 border-green-600"><i class="fas fa-percent mr-1"></i>%</button><button type="button" onclick="toggleSlopeMode(${countArboles},'deg')" id="btn_slope_deg_${countArboles}" class="flex-1 py-2 px-1 font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-compass mr-1"></i>Grados</button><button type="button" onclick="toggleSlopeMode(${countArboles},'calc')" id="btn_slope_calc_${countArboles}" class="flex-1 py-2 px-1 font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-calculator mr-1"></i>Calc.</button><button type="button" onclick="toggleSlopeMode(${countArboles},'clino')" id="btn_slope_clino_${countArboles}" class="flex-1 py-2 px-1 rounded-r-lg font-semibold text-xs bg-gray-100 text-gray-600 border-2 border-gray-300"><i class="fas fa-mobile-alt mr-1"></i>Clinóm.</button></div><div id="slope_pct_${countArboles}"><input type="number" id="val_slope_pct_${countArboles}" class="input-field" placeholder="Ej: 25" step="0.1" oninput="updateSlopeResult(${countArboles},'pct')"><span class="text-xs text-gray-500">Ingrese directamente en %</span></div><div id="slope_deg_${countArboles}" class="hidden"><input type="number" id="val_slope_deg_${countArboles}" class="input-field" placeholder="Ej: 14" step="0.1" oninput="updateSlopeResult(${countArboles},'deg')"><span class="text-xs text-gray-500">Ingrese en grados (°)</span></div><div id="slope_calc_${countArboles}" class="hidden bg-blue-50 p-2 rounded border border-blue-200"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs text-gray-600">Distancia (m)</label><input type="number" id="val_slope_dist_${countArboles}" class="input-field text-sm py-2" placeholder="Dist." step="0.1" oninput="updateSlopeResult(${countArboles},'calc')"></div><div><label class="text-xs text-gray-600">Altura (m)</label><input type="number" id="val_slope_alt_${countArboles}" class="input-field text-sm py-2" placeholder="Alt." step="0.1" oninput="updateSlopeResult(${countArboles},'calc')"></div></div><span class="text-xs text-blue-600"><i class="fas fa-info-circle mr-1"></i>% = (Altura / Distancia) × 100</span></div><div id="slope_clino_${countArboles}" class="hidden bg-purple-50 p-3 rounded border-2 border-purple-200 text-center"><div class="text-purple-700 mb-2"><i class="fas fa-mobile-alt fa-2x mb-2"></i><div class="font-bold">Clinómetro Digital</div></div><button type="button" onclick="openClinometer(${countArboles})" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm"><i class="fas fa-mountain mr-1"></i> Iniciar Medición</button><div class="text-xs text-purple-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Coloque el teléfono paralelo al terreno</div></div><div id="slope_result_${countArboles}" class="mt-2 text-center p-2 bg-gray-100 rounded border hidden"><span class="text-sm font-bold text-gray-700">Pendiente: </span><span id="slope_value_${countArboles}" class="text-lg font-bold text-green-700">0.0</span><span class="text-sm font-bold text-gray-700"> %</span></div></div></div><div class="mb-4"><label class="block text-sm font-bold mb-1">Nombre Científico</label><div class="species-autocomplete">
   <div class="flex flex-col gap-2">
     <div class="min-w-0">
       <input type="text" id="sp_arbol_${countArboles}" class="input-field"
@@ -3303,14 +3474,14 @@ function getSmoothedLatLngFromBuffer(
             const btnPct = document.getElementById('btn_slope_pct_' + id);
             const btnDeg = document.getElementById('btn_slope_deg_' + id);
             const btnCalc = document.getElementById('btn_slope_calc_' + id);
-            const btnWalk = document.getElementById('btn_slope_walk_' + id);
+            const btnClino = document.getElementById('btn_slope_clino_' + id);
             const divPct = document.getElementById('slope_pct_' + id);
             const divDeg = document.getElementById('slope_deg_' + id);
             const divCalc = document.getElementById('slope_calc_' + id);
-            const divWalk = document.getElementById('slope_walk_' + id);
+            const divClino = document.getElementById('slope_clino_' + id);
             
             // Reset all buttons
-            [btnPct, btnDeg, btnCalc, btnWalk].forEach(btn => {
+            [btnPct, btnDeg, btnCalc, btnClino].forEach(btn => {
                 if(btn) {
                     btn.classList.remove('bg-green-600', 'bg-purple-600', 'text-white', 'border-green-600', 'border-purple-600');
                     btn.classList.add('bg-gray-100', 'text-gray-600', 'border-gray-300');
@@ -3318,7 +3489,7 @@ function getSmoothedLatLngFromBuffer(
             });
             
             // Hide all divs
-            [divPct, divDeg, divCalc, divWalk].forEach(div => { if(div) div.classList.add('hidden'); });
+            [divPct, divDeg, divCalc, divClino].forEach(div => { if(div) div.classList.add('hidden'); });
             
             // Activate selected
             if (mode === 'pct') {
@@ -3333,27 +3504,592 @@ function getSmoothedLatLngFromBuffer(
                 btnCalc.classList.remove('bg-gray-100', 'text-gray-600', 'border-gray-300');
                 btnCalc.classList.add('bg-green-600', 'text-white', 'border-green-600');
                 divCalc.classList.remove('hidden');
-            } else if (mode === 'walk') {
-                btnWalk.classList.remove('bg-gray-100', 'text-gray-600', 'border-gray-300');
-                btnWalk.classList.add('bg-purple-600', 'text-white', 'border-purple-600');
-                divWalk.classList.remove('hidden');
+            } else if (mode === 'clino') {
+                btnClino.classList.remove('bg-gray-100', 'text-gray-600', 'border-gray-300');
+                btnClino.classList.add('bg-purple-600', 'text-white', 'border-purple-600');
+                divClino.classList.remove('hidden');
             }
         }
         
-        function openWalkTool(arbolId) {
-            alert('🚶 Herramienta de Caminata GPS\n\n⚠️ EN DESARROLLO\n\nEsta herramienta permitirá medir la inclinación del terreno caminando entre dos puntos con GPS.\n\nPróximamente disponible.');
-            // TODO: Integrar con módulo externo de caminata GPS
-            // El módulo debe retornar el valor de pendiente en % y llamar a:
-            // setSlopeFromWalk(arbolId, pendientePorcentaje);
+        // ============================================================
+        // CLINÓMETRO DIGITAL - Mide inclinación con sensores del teléfono
+        // ============================================================
+        let _clinoState = {
+            active: false,
+            arbolId: null,
+            orientHandler: null,
+            countdownTimer: null,
+            beepInterval: null,
+            stabilityTimer: null,
+            readings: [],
+            locked: false,
+            audioCtx: null,
+            phase: 'idle', // idle, countdown, measuring, locked, calibrating
+            calibOffset: 0 // MEJORA: offset de calibración en grados
+        };
+
+        // MEJORA: Cargar calibración previa del clinómetro desde localStorage
+        try {
+            const savedCalib = localStorage.getItem('pp01_clino_calibration');
+            if (savedCalib) {
+                const calibData = JSON.parse(savedCalib);
+                if (calibData && typeof calibData.offset === 'number') {
+                    _clinoState.calibOffset = calibData.offset;
+                }
+            }
+        } catch(e) { /* localStorage no disponible */ }
+
+        function _clinoBeep(freq, duration, type) {
+            try {
+                if (!_clinoState.audioCtx) _clinoState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = _clinoState.audioCtx;
+                if (ctx.state === 'suspended') ctx.resume();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = type || 'sine';
+                osc.frequency.value = freq;
+                gain.gain.value = 0.3;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration / 1000);
+                osc.stop(ctx.currentTime + duration / 1000);
+            } catch(e) { /* Audio not supported */ }
         }
-        
-        function setSlopeFromWalk(arbolId, pendientePct) {
-            // Función para recibir el resultado del módulo de caminata
+
+        function _clinoCalcTilt(beta, gamma) {
+            // Calcula ángulo de inclinación desde la horizontal
+            // beta = inclinación frontal (-180 a 180), gamma = inclinación lateral (-90 a 90)
+            const bRad = (beta || 0) * Math.PI / 180;
+            const gRad = (gamma || 0) * Math.PI / 180;
+            // Ángulo total desde la horizontal
+            const tiltRad = Math.acos(Math.min(1, Math.abs(Math.cos(bRad) * Math.cos(gRad))));
+            let tiltDeg = tiltRad * 180 / Math.PI;
+            // MEJORA: Aplicar offset de calibración
+            tiltDeg = Math.max(0, tiltDeg - _clinoState.calibOffset);
+            return tiltDeg; // en grados
+        }
+
+        function _clinoGetStdDev(arr) {
+            if (arr.length < 2) return 999;
+            const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+            const variance = arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
+            return Math.sqrt(variance);
+        }
+
+        function openClinometer(arbolId) {
+            _clinoState.arbolId = arbolId;
+            _clinoState.locked = false;
+            _clinoState.readings = [];
+            _clinoState.phase = 'idle';
+
+            // Crear modal
+            let modal = document.getElementById('clinometer_modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'clinometer_modal';
+                modal.innerHTML = `
+                <div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;">
+                    <div style="background:#1a1a2e;border-radius:20px;width:100%;max-width:380px;padding:24px;color:white;text-align:center;position:relative;">
+                        <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#a78bfa;margin-bottom:8px;">
+                            <i class="fas fa-mountain" style="margin-right:6px;"></i>Clinómetro Digital
+                        </div>
+                        <div id="clino_instruction" style="font-size:13px;color:#94a3b8;margin-bottom:16px;">
+                            Coloque el teléfono con la pantalla paralela a la superficie del terreno
+                        </div>
+                        
+                        <!-- Indicador visual circular -->
+                        <div style="position:relative;width:200px;height:200px;margin:0 auto 16px;">
+                            <svg viewBox="0 0 200 200" style="width:100%;height:100%;">
+                                <circle cx="100" cy="100" r="90" fill="none" stroke="#334155" stroke-width="4"/>
+                                <circle cx="100" cy="100" r="60" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,4"/>
+                                <circle cx="100" cy="100" r="30" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,4"/>
+                                <!-- Ticks cada 10 grados -->
+                                <g id="clino_ticks" stroke="#475569" stroke-width="1"></g>
+                                <!-- Aguja indicadora -->
+                                <line id="clino_needle" x1="100" y1="100" x2="100" y2="20" stroke="#f97316" stroke-width="3" stroke-linecap="round" transform="rotate(0,100,100)"/>
+                                <circle cx="100" cy="100" r="6" fill="#f97316"/>
+                            </svg>
+                            <div id="clino_angle_display" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin-top:30px;">
+                                <div id="clino_big_value" style="font-size:48px;font-weight:800;color:#f97316;line-height:1;">--</div>
+                                <div style="font-size:14px;color:#94a3b8;">grados</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Resultado en porcentaje -->
+                        <div id="clino_pct_display" style="background:#0f172a;border-radius:12px;padding:12px;margin-bottom:16px;">
+                            <span style="color:#94a3b8;font-size:13px;">Pendiente: </span>
+                            <span id="clino_pct_value" style="font-size:28px;font-weight:800;color:#22c55e;">--</span>
+                            <span style="color:#94a3b8;font-size:16px;font-weight:700;"> %</span>
+                        </div>
+                        
+                        <!-- Estado -->
+                        <div id="clino_status" style="font-size:13px;padding:8px;border-radius:8px;margin-bottom:16px;background:#1e293b;color:#64748b;">
+                            <i class="fas fa-hand-point-up" style="margin-right:4px;"></i> Presione "Iniciar Medición"
+                        </div>
+                        
+                        <!-- Barra de estabilidad -->
+                        <div id="clino_stability_bar_wrap" style="display:none;margin-bottom:16px;">
+                            <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Estabilidad</div>
+                            <div style="background:#1e293b;border-radius:6px;height:8px;overflow:hidden;">
+                                <div id="clino_stability_bar" style="height:100%;width:0%;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e);border-radius:6px;transition:width 0.3s;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Botones -->
+                        <div id="clino_btn_start_wrap">
+                            <button onclick="_clinoStart()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;border:none;width:100%;cursor:pointer;">
+                                <i class="fas fa-play mr-2"></i> Iniciar Medición
+                            </button>
+                        </div>
+                        <div id="clino_btn_actions_wrap" style="display:none;">
+                            <div style="display:flex;gap:8px;">
+                                <button onclick="_clinoAccept()" id="clino_btn_accept" style="flex:1;background:#22c55e;color:white;font-weight:700;font-size:14px;padding:12px;border-radius:10px;border:none;cursor:pointer;display:none;">
+                                    <i class="fas fa-check mr-1"></i> Aceptar
+                                </button>
+                                <button onclick="_clinoRetry()" id="clino_btn_retry" style="flex:1;background:#f59e0b;color:white;font-weight:700;font-size:14px;padding:12px;border-radius:10px;border:none;cursor:pointer;">
+                                    <i class="fas fa-redo mr-1"></i> Reintentar
+                                </button>
+                                <button onclick="_clinoCancel()" style="flex:1;background:#64748b;color:white;font-weight:700;font-size:14px;padding:12px;border-radius:10px;border:none;cursor:pointer;">
+                                    <i class="fas fa-times mr-1"></i> Cancelar
+                                </button>
+                            </div>
+                        </div>
+                        <!-- MEJORA: Calibración y diagnóstico -->
+                        <div id="clino_calib_section" style="margin-top:12px;padding-top:12px;border-top:1px solid #334155;">
+                            <div id="clino_calib_status" style="font-size:11px;color:#64748b;margin-bottom:6px;">
+                                <i class="fas fa-info-circle" style="margin-right:3px;"></i>
+                                <span id="clino_calib_text">Sin calibrar</span>
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button onclick="_clinoStartCalibration()" id="clino_btn_calibrate" style="flex:1;background:#1e293b;color:#94a3b8;font-weight:600;font-size:12px;padding:8px;border-radius:8px;border:1px solid #334155;cursor:pointer;">
+                                    <i class="fas fa-crosshairs mr-1"></i> Calibrar en plano
+                                </button>
+                                <button onclick="_clinoResetCalibration()" style="background:#1e293b;color:#64748b;font-weight:600;font-size:12px;padding:8px 12px;border-radius:8px;border:1px solid #334155;cursor:pointer;">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                <button onclick="_clinoRunDiagnostic()" style="background:#1e293b;color:#64748b;font-weight:600;font-size:12px;padding:8px 12px;border-radius:8px;border:1px solid #334155;cursor:pointer;" title="Diagnóstico de sensores">
+                                    <i class="fas fa-stethoscope"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                document.body.appendChild(modal);
+                // Generar ticks del dial
+                const ticksG = document.getElementById('clino_ticks');
+                for (let a = 0; a <= 90; a += 10) {
+                    const rad = (a - 90) * Math.PI / 180;
+                    const x1 = 100 + 82 * Math.cos(rad), y1 = 100 + 82 * Math.sin(rad);
+                    const x2 = 100 + 90 * Math.cos(rad), y2 = 100 + 90 * Math.sin(rad);
+                    ticksG.innerHTML += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+                }
+            }
+            modal.style.display = '';
+            // Reset UI
+            document.getElementById('clino_big_value').textContent = '--';
+            document.getElementById('clino_pct_value').textContent = '--';
+            document.getElementById('clino_status').innerHTML = '<i class="fas fa-hand-point-up" style="margin-right:4px;"></i> Presione "Iniciar Medición"';
+            document.getElementById('clino_status').style.background = '#1e293b';
+            document.getElementById('clino_status').style.color = '#64748b';
+            document.getElementById('clino_stability_bar_wrap').style.display = 'none';
+            document.getElementById('clino_btn_start_wrap').style.display = '';
+            document.getElementById('clino_btn_actions_wrap').style.display = 'none';
+            document.getElementById('clino_btn_accept').style.display = 'none';
+            document.getElementById('clino_btn_retry').style.display = '';
+            document.getElementById('clino_needle').setAttribute('transform', 'rotate(0,100,100)');
+            // MEJORA: Actualizar indicador de calibración
+            _clinoUpdateCalibStatus();
+        }
+
+        async function _clinoStart() {
+            // Solicitar permiso de sensores (requerido en iOS 13+)
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const perm = await DeviceOrientationEvent.requestPermission();
+                    if (perm !== 'granted') {
+                        alert('Se requiere permiso para acceder a los sensores del teléfono.');
+                        return;
+                    }
+                } catch(e) {
+                    alert('Error solicitando permiso de sensores: ' + e.message);
+                    return;
+                }
+            }
+            // Verificar soporte
+            if (typeof DeviceOrientationEvent === 'undefined') {
+                alert('Este dispositivo no soporta sensores de orientación.\nUse otro método de medición.');
+                return;
+            }
+
+            _clinoState.locked = false;
+            _clinoState.readings = [];
+            _clinoState.phase = 'countdown';
+
+            document.getElementById('clino_btn_start_wrap').style.display = 'none';
+            document.getElementById('clino_btn_actions_wrap').style.display = '';
+            document.getElementById('clino_btn_accept').style.display = 'none';
+            document.getElementById('clino_btn_retry').style.display = '';
+            document.getElementById('clino_stability_bar_wrap').style.display = 'none';
+
+            // Countdown 3 segundos para acomodar el teléfono
+            let countdown = 3;
+            const statusEl = document.getElementById('clino_status');
+            statusEl.style.background = '#312e81';
+            statusEl.style.color = '#c4b5fd';
+
+            const updateCountdown = () => {
+                if (countdown > 0) {
+                    statusEl.innerHTML = `<i class="fas fa-hourglass-half" style="margin-right:4px;"></i> Acomode el teléfono... <span style="font-size:24px;font-weight:800;">${countdown}</span>`;
+                    _clinoBeep(800, 150, 'sine');
+                    countdown--;
+                    _clinoState.countdownTimer = setTimeout(updateCountdown, 1000);
+                } else {
+                    // Iniciar medición real
+                    _clinoState.phase = 'measuring';
+                    statusEl.style.background = '#1e3a5f';
+                    statusEl.style.color = '#7dd3fc';
+                    statusEl.innerHTML = '<i class="fas fa-satellite-dish" style="margin-right:4px;"></i> Midiendo... mantenga estable';
+                    document.getElementById('clino_stability_bar_wrap').style.display = '';
+                    _clinoStartListening();
+                }
+            };
+            updateCountdown();
+        }
+
+        function _clinoStartListening() {
+            _clinoState.readings = [];
+            // Beep periódico cada 600ms mientras mide
+            _clinoState.beepInterval = setInterval(() => {
+                if (_clinoState.phase === 'measuring' && !_clinoState.locked) {
+                    _clinoBeep(600, 80, 'square');
+                }
+            }, 600);
+
+            _clinoState.orientHandler = function(e) {
+                if (_clinoState.locked) return;
+                const tiltDeg = _clinoCalcTilt(e.beta, e.gamma);
+                const tiltPct = Math.tan(tiltDeg * Math.PI / 180) * 100;
+
+                // Actualizar display en tiempo real
+                const clampedDeg = Math.min(tiltDeg, 90);
+                document.getElementById('clino_big_value').textContent = clampedDeg.toFixed(1);
+                document.getElementById('clino_pct_value').textContent = tiltPct.toFixed(1);
+                // Rotar aguja (0° = vertical arriba, 90° = horizontal derecha)
+                document.getElementById('clino_needle').setAttribute('transform', `rotate(${clampedDeg},100,100)`);
+
+                if (_clinoState.phase === 'measuring') {
+                    _clinoState.readings.push(tiltDeg);
+                    // Mantener ventana de últimas 30 lecturas (~1.5s a 50Hz)
+                    if (_clinoState.readings.length > 30) _clinoState.readings.shift();
+
+                    // Calcular estabilidad
+                    const stdDev = _clinoGetStdDev(_clinoState.readings);
+                    // Barra de estabilidad: 0% cuando stdDev>=3, 100% cuando stdDev<=0.3
+                    const stability = Math.max(0, Math.min(100, (3 - stdDev) / 2.7 * 100));
+                    document.getElementById('clino_stability_bar').style.width = stability + '%';
+
+                    // Si estable (stdDev < 0.5°) y al menos 20 lecturas
+                    if (stdDev < 0.5 && _clinoState.readings.length >= 20) {
+                        _clinoLock();
+                    }
+                }
+            };
+            window.addEventListener('deviceorientation', _clinoState.orientHandler);
+        }
+
+        function _clinoLock() {
+            if (_clinoState.locked) return;
+            _clinoState.locked = true;
+            _clinoState.phase = 'locked';
+
+            // Parar beep periódico
+            if (_clinoState.beepInterval) { clearInterval(_clinoState.beepInterval); _clinoState.beepInterval = null; }
+
+            // Alerta sonora diferente (tono más agudo, más largo)
+            _clinoBeep(1200, 100, 'sine');
+            setTimeout(() => _clinoBeep(1500, 150, 'sine'), 150);
+            setTimeout(() => _clinoBeep(1800, 300, 'sine'), 350);
+
+            // Calcular promedio final
+            const avg = _clinoState.readings.reduce((a, b) => a + b, 0) / _clinoState.readings.length;
+            const avgPct = Math.tan(avg * Math.PI / 180) * 100;
+
+            // Fijar resultado
+            document.getElementById('clino_big_value').textContent = avg.toFixed(1);
+            document.getElementById('clino_pct_value').textContent = avgPct.toFixed(1);
+            document.getElementById('clino_big_value').style.color = '#22c55e';
+            document.getElementById('clino_stability_bar').style.width = '100%';
+
+            const statusEl = document.getElementById('clino_status');
+            statusEl.style.background = '#14532d';
+            statusEl.style.color = '#86efac';
+            statusEl.innerHTML = '<i class="fas fa-check-circle" style="margin-right:4px;"></i> ¡Medición completada! — ' + avg.toFixed(1) + '° (' + avgPct.toFixed(1) + '%)';
+
+            // Mostrar botón aceptar
+            document.getElementById('clino_btn_accept').style.display = '';
+
+            // Vibrar si disponible
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+        }
+
+        function _clinoAccept() {
+            const avgDeg = parseFloat(document.getElementById('clino_big_value').textContent) || 0;
+            const avgPct = parseFloat(document.getElementById('clino_pct_value').textContent) || 0;
+            const arbolId = _clinoState.arbolId;
+            _clinoCleanup();
+
+            // Cerrar modal
+            document.getElementById('clinometer_modal').style.display = 'none';
+
+            // Llenar el campo de inclinación en porcentaje
+            setSlopeFromClinometer(arbolId, avgPct);
+        }
+
+        function _clinoRetry() {
+            _clinoCleanup();
+            _clinoState.locked = false;
+            _clinoState.readings = [];
+            document.getElementById('clino_big_value').style.color = '#f97316';
+            document.getElementById('clino_big_value').textContent = '--';
+            document.getElementById('clino_pct_value').textContent = '--';
+            document.getElementById('clino_needle').setAttribute('transform', 'rotate(0,100,100)');
+            document.getElementById('clino_stability_bar').style.width = '0%';
+            document.getElementById('clino_stability_bar_wrap').style.display = 'none';
+            document.getElementById('clino_btn_accept').style.display = 'none';
+            document.getElementById('clino_btn_start_wrap').style.display = '';
+            document.getElementById('clino_btn_actions_wrap').style.display = 'none';
+            const statusEl = document.getElementById('clino_status');
+            statusEl.style.background = '#1e293b';
+            statusEl.style.color = '#64748b';
+            statusEl.innerHTML = '<i class="fas fa-hand-point-up" style="margin-right:4px;"></i> Presione "Iniciar Medición"';
+            // Relanzar automáticamente
+            _clinoStart();
+        }
+
+        function _clinoCancel() {
+            _clinoCleanup();
+            document.getElementById('clinometer_modal').style.display = 'none';
+        }
+
+        function _clinoCleanup() {
+            if (_clinoState.orientHandler) {
+                window.removeEventListener('deviceorientation', _clinoState.orientHandler);
+                _clinoState.orientHandler = null;
+            }
+            if (_clinoState.countdownTimer) { clearTimeout(_clinoState.countdownTimer); _clinoState.countdownTimer = null; }
+            if (_clinoState.beepInterval) { clearInterval(_clinoState.beepInterval); _clinoState.beepInterval = null; }
+            _clinoState.phase = 'idle';
+        }
+
+        // ============================================================
+        // MEJORA: Calibración del clinómetro en superficie plana
+        // ============================================================
+        function _clinoUpdateCalibStatus() {
+            const el = document.getElementById('clino_calib_text');
+            if (!el) return;
+            if (_clinoState.calibOffset > 0) {
+                el.innerHTML = `<span style="color:#22c55e;">✓ Calibrado</span> (offset: ${_clinoState.calibOffset.toFixed(2)}°)`;
+            } else {
+                el.textContent = 'Sin calibrar — para mayor precisión, calibre en superficie plana';
+            }
+        }
+
+        async function _clinoStartCalibration() {
+            // Solicitar permiso de sensores si es iOS
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const perm = await DeviceOrientationEvent.requestPermission();
+                    if (perm !== 'granted') { alert('Se requiere permiso para calibrar.'); return; }
+                } catch(e) { alert('Error: ' + e.message); return; }
+            }
+            if (typeof DeviceOrientationEvent === 'undefined') {
+                alert('Sensores no disponibles en este dispositivo.'); return;
+            }
+
+            // Deshabilitar botón de calibrar durante proceso
+            const btn = document.getElementById('clino_btn_calibrate');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Calibrando...'; }
+
+            const statusEl = document.getElementById('clino_status');
+            if (statusEl) {
+                statusEl.style.background = '#312e81';
+                statusEl.style.color = '#c4b5fd';
+                statusEl.innerHTML = '<i class="fas fa-crosshairs" style="margin-right:4px;"></i> Coloque en superficie PLANA — midiendo offset...';
+            }
+
+            const calibReadings = [];
+            let calibHandler = null;
+
+            // Temporalmente desactivar offset para leer el crudo
+            const prevOffset = _clinoState.calibOffset;
+            _clinoState.calibOffset = 0;
+
+            calibHandler = function(e) {
+                const tilt = _clinoCalcTilt(e.beta, e.gamma);
+                calibReadings.push(tilt);
+                // Actualizar display en tiempo real
+                document.getElementById('clino_big_value').textContent = tilt.toFixed(1);
+                document.getElementById('clino_pct_value').textContent = (Math.tan(tilt * Math.PI / 180) * 100).toFixed(1);
+            };
+            window.addEventListener('deviceorientation', calibHandler);
+
+            // Esperar 3 segundos, luego recolectar por 3 segundos más
+            await new Promise(r => setTimeout(r, 3000));
+            const startIdx = calibReadings.length;
+            await new Promise(r => setTimeout(r, 3000));
+
+            window.removeEventListener('deviceorientation', calibHandler);
+
+            // Calcular offset promedio de las lecturas estables
+            const stableReadings = calibReadings.slice(startIdx);
+            if (stableReadings.length > 10) {
+                // Eliminar outliers (percentiles 10-90)
+                const sorted = [...stableReadings].sort((a, b) => a - b);
+                const p10 = Math.floor(sorted.length * 0.1);
+                const p90 = Math.floor(sorted.length * 0.9);
+                const trimmed = sorted.slice(p10, p90);
+                const avgOffset = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+
+                _clinoState.calibOffset = Math.max(0, avgOffset);
+
+                // Persistir en localStorage
+                try {
+                    localStorage.setItem('pp01_clino_calibration', JSON.stringify({
+                        offset: _clinoState.calibOffset,
+                        date: new Date().toISOString(),
+                        samples: stableReadings.length
+                    }));
+                } catch(e) {}
+
+                _clinoBeep(1000, 150, 'sine');
+                setTimeout(() => _clinoBeep(1200, 200, 'sine'), 200);
+
+                if (statusEl) {
+                    statusEl.style.background = '#14532d';
+                    statusEl.style.color = '#86efac';
+                    statusEl.innerHTML = `<i class="fas fa-check-circle" style="margin-right:4px;"></i> Calibrado — offset: ${_clinoState.calibOffset.toFixed(2)}° (${stableReadings.length} muestras)`;
+                }
+            } else {
+                _clinoState.calibOffset = prevOffset; // Restaurar
+                if (statusEl) {
+                    statusEl.style.background = '#7f1d1d';
+                    statusEl.style.color = '#fca5a5';
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i> Calibración fallida — pocas lecturas. Reintente.';
+                }
+            }
+
+            _clinoUpdateCalibStatus();
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-crosshairs mr-1"></i> Calibrar en plano'; }
+        }
+
+        function _clinoResetCalibration() {
+            _clinoState.calibOffset = 0;
+            try { localStorage.removeItem('pp01_clino_calibration'); } catch(e) {}
+            _clinoUpdateCalibStatus();
+            const statusEl = document.getElementById('clino_status');
+            if (statusEl) {
+                statusEl.style.background = '#1e293b';
+                statusEl.style.color = '#64748b';
+                statusEl.innerHTML = '<i class="fas fa-undo" style="margin-right:4px;"></i> Calibración eliminada';
+            }
+        }
+
+        // ============================================================
+        // MEJORA: Diagnóstico rápido de sensores
+        // ============================================================
+        async function _clinoRunDiagnostic() {
+            const results = [];
+
+            // 1. DeviceOrientation
+            const hasOrientation = typeof DeviceOrientationEvent !== 'undefined';
+            results.push({
+                name: 'Sensor de orientación',
+                icon: hasOrientation ? 'fa-check-circle' : 'fa-times-circle',
+                color: hasOrientation ? '#22c55e' : '#ef4444',
+                detail: hasOrientation ? 'DeviceOrientation disponible' : 'No disponible'
+            });
+
+            // 2. GPS
+            const hasGeo = 'geolocation' in navigator;
+            results.push({
+                name: 'GPS / Geolocalización',
+                icon: hasGeo ? 'fa-check-circle' : 'fa-times-circle',
+                color: hasGeo ? '#22c55e' : '#ef4444',
+                detail: hasGeo ? 'Navigator.geolocation disponible' : 'No disponible'
+            });
+
+            // 3. localStorage
+            let hasStorage = false;
+            try { localStorage.setItem('_test', '1'); localStorage.removeItem('_test'); hasStorage = true; } catch(e) {}
+            results.push({
+                name: 'Almacenamiento local',
+                icon: hasStorage ? 'fa-check-circle' : 'fa-exclamation-triangle',
+                color: hasStorage ? '#22c55e' : '#f59e0b',
+                detail: hasStorage ? 'localStorage funcional' : 'No disponible (calibración no persistirá)'
+            });
+
+            // 4. Calibración actual
+            const hasCalib = _clinoState.calibOffset > 0;
+            results.push({
+                name: 'Calibración clinómetro',
+                icon: hasCalib ? 'fa-check-circle' : 'fa-info-circle',
+                color: hasCalib ? '#22c55e' : '#94a3b8',
+                detail: hasCalib ? `Offset: ${_clinoState.calibOffset.toFixed(2)}°` : 'Sin calibrar'
+            });
+
+            // 5. Test rápido del sensor (1 segundo)
+            if (hasOrientation) {
+                let gotReading = false;
+                const testHandler = (e) => {
+                    if (e.beta !== null || e.gamma !== null) gotReading = true;
+                };
+                window.addEventListener('deviceorientation', testHandler);
+                await new Promise(r => setTimeout(r, 1200));
+                window.removeEventListener('deviceorientation', testHandler);
+                results.push({
+                    name: 'Lectura de sensores',
+                    icon: gotReading ? 'fa-check-circle' : 'fa-exclamation-triangle',
+                    color: gotReading ? '#22c55e' : '#f59e0b',
+                    detail: gotReading ? 'Recibiendo datos del acelerómetro' : 'Sin datos (¿permisos denegados?)'
+                });
+            }
+
+            // Mostrar resultados
+            const html = results.map(r =>
+                `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e293b;">
+                    <i class="fas ${r.icon}" style="color:${r.color};font-size:16px;width:20px;text-align:center;"></i>
+                    <div><div style="font-weight:600;font-size:13px;color:#e2e8f0;">${r.name}</div>
+                    <div style="font-size:11px;color:#94a3b8;">${r.detail}</div></div>
+                </div>`
+            ).join('');
+
+            const statusEl = document.getElementById('clino_status');
+            if (statusEl) {
+                statusEl.style.background = '#0f172a';
+                statusEl.style.color = '#e2e8f0';
+                statusEl.innerHTML = `<div style="text-align:left;">
+                    <div style="font-weight:700;margin-bottom:6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#7dd3fc;">
+                        <i class="fas fa-stethoscope" style="margin-right:4px;"></i>Diagnóstico de Sensores
+                    </div>
+                    ${html}
+                    <div style="margin-top:8px;font-size:11px;color:#475569;text-align:center;">Toque "Iniciar Medición" cuando esté listo</div>
+                </div>`;
+            }
+        }
+
+        function setSlopeFromClinometer(arbolId, pendientePct) {
+            // Función para recibir el resultado del clinómetro
             const resultDiv = document.getElementById('slope_result_' + arbolId);
             const valueSpan = document.getElementById('slope_value_' + arbolId);
+            // También llenar el campo de porcentaje directo para que sea editable
+            const pctInput = document.getElementById('val_slope_pct_' + arbolId);
             if (resultDiv && valueSpan) {
                 resultDiv.classList.remove('hidden');
                 valueSpan.textContent = pendientePct.toFixed(1);
+            }
+            if (pctInput) {
+                pctInput.value = pendientePct.toFixed(1);
             }
         }
         
@@ -3534,6 +4270,22 @@ function getSmoothedLatLngFromBuffer(
         let mapAccuracyCircle = null;
         let mapAutoRefreshInterval = null;
 
+        // MEJORA: Bing Aerial tile layer (usa quadkeys en vez de z/x/y)
+        L.TileLayer.BingAerial = L.TileLayer.extend({
+            options: { subdomains: '0123', maxNativeZoom: 19, maxZoom: 22, attribution: 'Tiles &copy; Microsoft Bing', errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==' },
+            getTileUrl: function(c) {
+                let q = '';
+                for (let i = c.z; i > 0; i--) { let d = 0; const m = 1 << (i - 1); if ((c.x & m) !== 0) d++; if ((c.y & m) !== 0) d += 2; q += d; }
+                return 'https://ecn.t' + this.options.subdomains[Math.abs(c.x + c.y) % 4] + '.tiles.virtualearth.net/tiles/a' + q + '.jpeg?g=14205';
+            }
+        });
+
+        // MEJORA: Variables globales para consulta multi-capa WMS
+        window._mapQueryMode = false;
+        window._wmsQueryLayers = [];
+        window._lastWmsQueryResults = null;
+        window._lastWmsQueryLatLng = null;
+
         function initializeMap() {
             try {
                 if (!inspeccionIniciada) return;
@@ -3556,17 +4308,120 @@ function getSmoothedLatLngFromBuffer(
                     zoomControl: true,
                     attributionControl: true,
                     tap: true,
-                    dragging: true
+                    dragging: true,
+                    maxZoom: 22
                 });
 
-                // Base Esri World Imagery (sin etiquetas)
-                L.tileLayer(
+                // ── Capas Base ──
+                // MEJORA: OpenTopoMap con relieve (capa offline por defecto)
+                const _errTile = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==';
+                const openTopo = L.tileLayer(
+                    'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                    { subdomains: 'abc', maxNativeZoom: 17, maxZoom: 22, attribution: '&copy; OpenTopoMap', errorTileUrl: _errTile }
+                );
+                // Google Híbrido (satélite + etiquetas)
+                const googleHybrid = L.tileLayer(
+                    'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+                    { subdomains: '0123', maxNativeZoom: 20, maxZoom: 22, attribution: 'Tiles &copy; Google', errorTileUrl: _errTile }
+                );
+                // Esri World Imagery
+                const esriImagery = L.tileLayer(
                     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    { maxNativeZoom: 19, maxZoom: 22, attribution: 'Tiles &copy; Esri', errorTileUrl: _errTile }
+                );
+                // MEJORA: Bing Aerial
+                const bingAerial = new L.TileLayer.BingAerial();
+
+                openTopo.addTo(inspeccionMap); // Default — disponible offline
+
+                // ── Capas WMS Overlay ──
+                // Catastro SNIT (existente — se mantiene igual)
+                const snitWmsUrl = 'https://siri.snitcr.go.cr/Geoservicios/wms';
+                const snitZona1 = L.tileLayer.wms(snitWmsUrl, {
+                    layers: 'RI_CA_AC_ZONA1_1K_5K', format: 'image/png', transparent: true,
+                    version: '1.1.1', opacity: 0.7, maxZoom: 22, attribution: 'Catastro &copy; SNIT-IGN CR'
+                });
+                // MEJORA: Cauces y Drenaje (IGN Cartografía 1:25mil)
+                const ignWmsUrl = 'https://geos.snitcr.go.cr/be/IGN_25/wms';
+                const ignCauces = L.tileLayer.wms(ignWmsUrl, {
+                    layers: 'caucedrenaje_25k', format: 'image/png', transparent: true,
+                    version: '1.1.1', opacity: 0.8, maxZoom: 22, attribution: 'IGN-CR 1:25k',
+                    styles: ''
+                });
+                // MEJORA: Dictámenes Dirección de Agua (MINAE)
+                const daWmsUrl = 'https://mapas.da.go.cr/geopc.php';
+                const daDictPI = L.tileLayer.wms(daWmsUrl, {
+                    layers: 'DA_DICTAMENES_PUNTO_INICIAL', format: 'image/png', transparent: true,
+                    version: '1.1.1', opacity: 0.8, maxZoom: 22, attribution: 'DA-MINAE'
+                });
+                const daDictPF = L.tileLayer.wms(daWmsUrl, {
+                    layers: 'DA_DICTAMENES_PUNTO_FINAL', format: 'image/png', transparent: true,
+                    version: '1.1.1', opacity: 0.8, maxZoom: 22, attribution: 'DA-MINAE'
+                });
+
+                // Control de capas Leaflet
+                const baseLayers = {
+                    '🏔️ Topográfico (offline)': openTopo,
+                    'Google Híbrido': googleHybrid,
+                    'Esri Aérea': esriImagery,
+                    'Bing Aérea': bingAerial
+                };
+                const overlays = {
+                    '📐 Catastro Zona 1': snitZona1,
+                    '🌊 Cauces y Drenaje': ignCauces,
+                    '💧 Dict. Pto. Inicial': daDictPI,
+                    '💧 Dict. Pto. Final': daDictPF
+                };
+                L.control.layers(baseLayers, overlays, { position: 'topright', collapsed: true }).addTo(inspeccionMap);
+
+                // ── Registro WMS para consulta multi-capa ──
+                window._wmsQueryLayers = [
                     {
-                        maxZoom: 19,
-                        attribution: 'Tiles &copy; Esri'
+                        name: 'Catastro', layer: snitZona1, url: snitWmsUrl,
+                        queryLayer: 'RI_CA_AC_ZONA1_1K_5K', icon: 'fa-map', color: '#1e40af',
+                        fields: null, minZoom: 15 // null = handler especial para catastro
+                    },
+                    {
+                        name: 'Cauces y Drenaje', layer: ignCauces, url: ignWmsUrl,
+                        queryLayer: 'caucedrenaje_25k', icon: 'fa-water', color: '#2563eb',
+                        fields: ['nom_objeto', 'nombre'], minZoom: 13
+                    },
+                    {
+                        name: 'Dict. Pto. Inicial', layer: daDictPI, url: daWmsUrl,
+                        queryLayer: 'DA_DICTAMENES_PUNTO_INICIAL', icon: 'fa-tint', color: '#0891b2',
+                        fields: ['TIPO_DE_FUENTE', 'NUMERO_DE_OFICIO', 'CRITERIO'], minZoom: 10
+                    },
+                    {
+                        name: 'Dict. Pto. Final', layer: daDictPF, url: daWmsUrl,
+                        queryLayer: 'DA_DICTAMENES_PUNTO_FINAL', icon: 'fa-tint', color: '#0e7490',
+                        fields: ['TIPO_DE_FUENTE', 'NUMERO_DE_OFICIO', 'CRITERIO'], minZoom: 10
                     }
-                ).addTo(inspeccionMap);
+                ];
+
+                // ── Botón toggle "Modo Consulta WMS" ──
+                const QueryCtrl = L.Control.extend({
+                    options: { position: 'topleft' },
+                    onAdd: function() {
+                        const c = L.DomUtil.create('div', 'leaflet-bar');
+                        c.innerHTML = '<a id="btn_map_query" href="#" title="Activar/desactivar consulta WMS" style="width:36px;height:36px;line-height:36px;text-align:center;font-size:17px;background:#fff;color:#666;display:block;text-decoration:none;border-radius:4px;"><i class="fas fa-info-circle"></i></a>';
+                        L.DomEvent.disableClickPropagation(c);
+                        c.querySelector('a').addEventListener('click', function(ev) {
+                            ev.preventDefault();
+                            window._mapQueryMode = !window._mapQueryMode;
+                            this.style.background = window._mapQueryMode ? '#2563eb' : '#fff';
+                            this.style.color = window._mapQueryMode ? '#fff' : '#666';
+                            this.title = window._mapQueryMode ? 'Consulta WMS ACTIVA — toque el mapa' : 'Activar consulta WMS';
+                        });
+                        return c;
+                    }
+                });
+                new QueryCtrl().addTo(inspeccionMap);
+
+                // ── Click handler: consulta multi-capa WMS ──
+                inspeccionMap.on('click', function(e) {
+                    if (!window._mapQueryMode) return;
+                    _queryAllWmsLayers(e);
+                });
 
                 // Grupos (cluster para puntos)
                 mapLayers.trees.group = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
@@ -3907,7 +4762,7 @@ function getSmoothedLatLngFromBuffer(
                 if (mapCurrentLocationMarker && mapCurrentLocationMarker.getLatLng) bounds.extend(mapCurrentLocationMarker.getLatLng());
 
                 if (bounds.isValid()) {
-                    inspeccionMap.fitBounds(bounds, { padding: [18, 18], maxZoom: 19 });
+                    inspeccionMap.fitBounds(bounds, { padding: [18, 18], maxZoom: 18 });
                 } else {
                     // fallback: CR
                     inspeccionMap.setView([9.9, -84.1], 15);
@@ -3982,6 +4837,248 @@ function getSmoothedLatLngFromBuffer(
                 console.error('Error DOMContentLoaded map init:', err);
             }
         });
+
+        // ============================================================================
+        // MEJORA: Sistema de consulta multi-capa WMS (GetFeatureInfo)
+        // ============================================================================
+
+        async function _queryAllWmsLayers(e) {
+            try {
+                if (!inspeccionMap) return;
+                const zoom = inspeccionMap.getZoom();
+                const size = inspeccionMap.getSize();
+                const bounds = inspeccionMap.getBounds();
+                const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+                const bbox = `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`;
+                const pt = inspeccionMap.latLngToContainerPoint(e.latlng);
+
+                // Filtrar capas WMS activas y visibles al zoom actual
+                const active = (window._wmsQueryLayers || []).filter(wl =>
+                    inspeccionMap.hasLayer(wl.layer) && zoom >= wl.minZoom
+                );
+
+                if (active.length === 0) {
+                    L.popup({ maxWidth: 280 }).setLatLng(e.latlng)
+                        .setContent('<div style="text-align:center;padding:8px;color:#888;font-size:13px"><i class="fas fa-layer-group" style="margin-right:4px;"></i> Active alguna capa WMS y haga zoom para consultar</div>')
+                        .openOn(inspeccionMap);
+                    return;
+                }
+
+                // Popup de carga
+                const popup = L.popup({ maxWidth: 310, maxHeight: 380 }).setLatLng(e.latlng)
+                    .setContent(`<div style="text-align:center;padding:10px;font-size:13px"><i class="fas fa-spinner fa-spin" style="margin-right:4px;"></i> Consultando ${active.length} capa(s)...</div>`)
+                    .openOn(inspeccionMap);
+
+                // Consultar todas las capas en paralelo
+                const results = await Promise.allSettled(active.map(async (wl) => {
+                    const sep = wl.url.includes('?') ? '&' : '?';
+                    const url = wl.url + sep +
+                        'SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo' +
+                        `&LAYERS=${wl.queryLayer}&QUERY_LAYERS=${wl.queryLayer}` +
+                        '&INFO_FORMAT=application/json&SRS=EPSG:4326' +
+                        `&BBOX=${bbox}&WIDTH=${size.x}&HEIGHT=${size.y}` +
+                        `&X=${Math.round(pt.x)}&Y=${Math.round(pt.y)}&FEATURE_COUNT=5`;
+
+                    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                    const ct = resp.headers.get('content-type') || '';
+                    let features = [];
+                    if (ct.includes('json')) {
+                        const data = await resp.json();
+                        features = data.features || [];
+                    } else {
+                        // Intentar parsear texto/GML como fallback
+                        const txt = await resp.text();
+                        if (txt && !txt.includes('no features') && !txt.includes('empty') && txt.trim().length > 30) {
+                            features = [{ properties: { _raw_text: txt }, _isText: true }];
+                        }
+                    }
+                    return { wl, features };
+                }));
+
+                // Filtrar resultados exitosos con datos
+                const hits = results
+                    .filter(r => r.status === 'fulfilled' && r.value.features.length > 0)
+                    .map(r => r.value);
+
+                if (hits.length === 0) {
+                    popup.setContent('<div style="text-align:center;padding:10px;color:#888;font-size:13px"><i class="fas fa-search" style="margin-right:4px;"></i> Sin datos en este punto</div>');
+                    return;
+                }
+
+                // Guardar resultados para navegación
+                window._lastWmsQueryResults = hits;
+                window._lastWmsQueryLatLng = e.latlng;
+
+                if (hits.length === 1) {
+                    popup.setContent(_fmtWmsResult(hits[0], false));
+                } else {
+                    popup.setContent(_fmtWmsSelector(hits));
+                }
+            } catch (err) {
+                console.error('Error _queryAllWmsLayers:', err);
+            }
+        }
+
+        // Selector cuando hay múltiples capas con resultados
+        function _fmtWmsSelector(hits) {
+            let h = '<div style="font-size:13px;"><div style="font-weight:bold;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:6px;color:#334155"><i class="fas fa-layer-group" style="margin-right:4px;"></i> Capas encontradas</div>';
+            hits.forEach((hit, idx) => {
+                const preview = _getWmsPreview(hit);
+                h += `<div onclick="_showWmsResult(${idx})" style="cursor:pointer;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;" onmouseenter="this.style.background='#eff6ff'" onmouseleave="this.style.background='#f8fafc'"><div style="display:flex;align-items:center;gap:6px;"><i class="fas ${hit.wl.icon}" style="color:${hit.wl.color};font-size:15px;width:18px;text-align:center;"></i><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;color:#1e293b;">${hit.wl.name}</div><div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(preview)}</div></div><i class="fas fa-chevron-right" style="color:#94a3b8;font-size:11px;"></i></div></div>`;
+            });
+            h += '</div>';
+            return h;
+        }
+
+        // Vista previa breve de un resultado
+        function _getWmsPreview(hit) {
+            const p = hit.features[0]?.properties || {};
+            if (hit.wl.fields === null) {
+                // Catastro
+                const finca = p.FINCA || p.finca || p.NFINCA || p.nfinca || p.NUM_FINCA || '';
+                const plano = p.PLANO || p.plano || p.NPLANO || p.nplano || p.NUM_PLANO || '';
+                if (finca) return 'Finca: ' + finca;
+                if (plano) return 'Plano: ' + plano;
+                return 'Datos disponibles';
+            }
+            for (const f of hit.wl.fields) {
+                const v = p[f] || p[f.toLowerCase()] || p[f.toUpperCase()];
+                if (v) return f + ': ' + String(v).slice(0, 45);
+            }
+            return hit.features.length + ' resultado(s)';
+        }
+
+        // Mostrar resultado de una capa específica
+        function _showWmsResult(idx) {
+            const hits = window._lastWmsQueryResults;
+            if (!hits || !hits[idx] || !inspeccionMap || !inspeccionMap._popup) return;
+            inspeccionMap._popup.setContent(_fmtWmsResult(hits[idx], hits.length > 1));
+        }
+
+        // Volver al selector
+        function _showWmsSelector() {
+            const hits = window._lastWmsQueryResults;
+            if (!hits || !inspeccionMap || !inspeccionMap._popup) return;
+            inspeccionMap._popup.setContent(_fmtWmsSelector(hits));
+        }
+
+        // Formatear resultado de una capa WMS
+        function _fmtWmsResult(hit, showBack) {
+            const wl = hit.wl;
+            const feat = hit.features[0];
+            const p = feat.properties || {};
+            let h = '<div style="font-size:13px;line-height:1.6">';
+
+            if (showBack) {
+                h += '<div onclick="_showWmsSelector()" style="cursor:pointer;color:#2563eb;font-size:12px;margin-bottom:4px;font-weight:600;"><i class="fas fa-arrow-left" style="margin-right:3px;"></i> Volver a lista</div>';
+            }
+
+            h += `<div style="font-weight:bold;color:${wl.color};border-bottom:1px solid #ddd;padding-bottom:3px;margin-bottom:4px"><i class="fas ${wl.icon}" style="margin-right:3px;"></i> ${wl.name}</div>`;
+
+            // Si es respuesta texto crudo (no JSON)
+            if (feat._isText) {
+                h += '<div style="font-size:12px;max-height:180px;overflow:auto">' + p._raw_text + '</div>';
+                h += '</div>';
+                return h;
+            }
+
+            if (wl.fields === null) {
+                // Handler especial para Catastro (misma lógica original preservada)
+                h += _fmtCatastroProps(p);
+            } else {
+                // Campos específicos solicitados
+                let foundAny = false;
+                wl.fields.forEach(f => {
+                    const v = p[f] || p[f.toLowerCase()] || p[f.toUpperCase()] || '';
+                    if (v !== '' && v !== null) {
+                        h += `<div><span style="color:#666">${f}:</span> <strong>${escapeHtml(String(v))}</strong></div>`;
+                        foundAny = true;
+                    }
+                });
+                // Si ningún campo específico coincidió, mostrar todos los disponibles
+                if (!foundAny) {
+                    Object.entries(p).slice(0, 10).forEach(([k, v]) => {
+                        if (v !== null && v !== '' && k !== 'geometry' && k !== 'bbox' && k !== '_raw_text') {
+                            h += `<div><span style="color:#666">${k}:</span> <strong>${escapeHtml(String(v))}</strong></div>`;
+                        }
+                    });
+                }
+            }
+
+            // Si hay múltiples features, indicar
+            if (hit.features.length > 1) {
+                h += `<div style="margin-top:4px;font-size:11px;color:#94a3b8;border-top:1px solid #eee;padding-top:3px;">${hit.features.length} elementos en este punto</div>`;
+            }
+
+            h += '</div>';
+            return h;
+        }
+
+        // Formatear propiedades catastrales (lógica original preservada 1:1)
+        function _fmtCatastroProps(p) {
+            let h = '';
+            const fields = [
+                ['Finca', 'FINCA', 'finca', 'Finca', 'NFINCA', 'nfinca', 'NUM_FINCA', 'num_finca'],
+                ['Plano', 'PLANO', 'plano', 'Plano', 'NPLANO', 'nplano', 'NUM_PLANO', 'num_plano'],
+                ['Identifica', 'IDENTIFICA', 'identifica', 'Identifica', 'IDENTIFICADOR', 'ID'],
+                ['Provincia', 'PROVINCIA', 'provincia'],
+                ['Cantón', 'CANTON', 'canton', 'Cantón'],
+                ['Distrito', 'DISTRITO', 'distrito']
+            ];
+            fields.forEach(aliases => {
+                const label = aliases[0];
+                for (let i = 0; i < aliases.length; i++) {
+                    if (p[aliases[i]] !== undefined && p[aliases[i]] !== null && p[aliases[i]] !== '') {
+                        h += `<div><span style="color:#666">${label}:</span> <strong>${p[aliases[i]]}</strong></div>`;
+                        break;
+                    }
+                }
+            });
+            // Mostrar otros atributos no cubiertos (original)
+            const shown = new Set(fields.flat());
+            Object.keys(p).forEach(k => {
+                if (!shown.has(k) && p[k] !== null && p[k] !== '' && k !== 'bbox' && k !== 'geometry') {
+                    h += `<div><span style="color:#666">${k}:</span> ${p[k]}</div>`;
+                }
+            });
+            return h;
+        }
+
+        // ============================================================================
+        // MEJORA: Pre-cache de tiles OpenTopoMap para Costa Rica (offline)
+        // ============================================================================
+
+        function _precacheTilesCR() {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+            const lon2x = (lon, z) => Math.floor((lon + 180) / 360 * (1 << z));
+            const lat2y = (lat, z) => Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * (1 << z));
+
+            const urls = [];
+            // Costa Rica: lat 8.0–11.2, lon -86.0 a -82.5
+            const B = { latMin: 8.0, latMax: 11.2, lonMin: -86.0, lonMax: -82.5 };
+            // Zoom 8-11 para todo CR (~350 tiles, ~10 MB)
+            for (let z = 8; z <= 11; z++) {
+                const x0 = lon2x(B.lonMin, z), x1 = lon2x(B.lonMax, z);
+                const y0 = lat2y(B.latMax, z), y1 = lat2y(B.latMin, z);
+                for (let x = x0; x <= x1; x++) {
+                    for (let y = y0; y <= y1; y++) {
+                        urls.push(`https://${['a','b','c'][(x+y)%3]}.tile.opentopomap.org/${z}/${x}/${y}.png`);
+                    }
+                }
+            }
+            navigator.serviceWorker.controller.postMessage({ type: 'PRECACHE_TILES', urls });
+            console.log('[PP01] Pre-caching ' + urls.length + ' tiles de CR para uso offline');
+        }
+
+        // Disparar pre-cache al registrar SW (solo la primera vez)
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.ready.then(() => {
+                if (!localStorage.getItem('pp01_tiles_cached_v1')) {
+                    setTimeout(_precacheTilesCR, 3000); // esperar 3s para no bloquear carga
+                    localStorage.setItem('pp01_tiles_cached_v1', new Date().toISOString());
+                }
+            }).catch(() => {});
+        }
 
     
 
