@@ -31,10 +31,6 @@ const WMS_HOSTS = [
 /* 1x1 PNG transparente para tiles fallback offline */
 const EMPTY_TILE_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==';
 
-// Límite de tiles en caché
-const TILE_CACHE_MAX_ITEMS = 2000; // ajustable
-const TILE_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
-
 // ── Install ──
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -44,27 +40,15 @@ self.addEventListener('install', (event) => {
   })());
 });
 
-// ── Activate: limpiar caches viejos PERO mantener TILE_CACHE con límite ──
-async function cleanTileCache() {
-    const cache = await caches.open(TILE_CACHE);
-    const requests = await cache.keys();
-    if (requests.length <= TILE_CACHE_MAX_ITEMS) return;
-
-    // Obtener metadatos de tiempo (no tenemos, así que simplemente eliminamos los más antiguos)
-    // Podríamos almacenar timestamps en una base aparte, pero por simplicidad:
-    const toDelete = requests.length - TILE_CACHE_MAX_ITEMS;
-    for (let i = 0; i < toDelete; i++) {
-        await cache.delete(requests[i]);
-    }
-}
-
+// ── Activate: limpiar caches viejos PERO mantener TILE_CACHE ──
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.map(k => {
       if (k.startsWith('pp01-cache-') && k !== CACHE_NAME) return caches.delete(k);
+      // TILE_CACHE se mantiene siempre (no empieza con pp01-cache-)
+      return null;
     }));
-    await cleanTileCache(); // <-- nuevo
     self.clients.claim();
   })());
 });
@@ -156,7 +140,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(cacheFirst(req));
 });
 
-// ── Message handler: pre-cache tiles de CR y skipWaiting ──
+// ── Message handler: pre-cache tiles de CR ──
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'PRECACHE_TILES') {
     const urls = event.data.urls || [];
@@ -180,7 +164,5 @@ self.addEventListener('message', (event) => {
         type: 'PRECACHE_DONE', cached, failed, total: urls.length
       }));
     })());
-  } else if (event.data && event.data.action === 'skipWaiting') {
-    self.skipWaiting();
   }
 });
